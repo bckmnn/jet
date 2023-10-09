@@ -8,10 +8,10 @@ import (
 )
 
 // dumpAll returns
-//  - everything in Runtime.context
-//  - everything in Runtime.variables
-//  - everything in Runtime.set.globals
-//  - everything in Runtime.blocks
+//   - everything in Runtime.context
+//   - everything in Runtime.variables
+//   - everything in Runtime.set.globals
+//   - everything in Runtime.blocks
 func dumpAll(a Arguments, depth int) reflect.Value {
 	var b bytes.Buffer
 	var vars VarMap

@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"reflect"
 	"runtime"
 	"sort"
@@ -337,7 +338,6 @@ func (st *Runtime) executeLetList(set *SetNode) {
 }
 
 func (st *Runtime) executeYieldBlock(block *BlockNode, blockParam, yieldParam *BlockParameterList, expression Expression, content *ListNode) {
-
 	needNewScope := len(blockParam.List) > 0 || len(yieldParam.List) > 0
 	if needNewScope {
 		st.newScope()
@@ -406,6 +406,7 @@ func (st *Runtime) executeList(list *ListNode) (returnValue reflect.Value) {
 
 	for i := 0; i < len(list.Nodes); i++ {
 		node := list.Nodes[i]
+		log.Println("node:", node.String())
 		switch node.Type() {
 
 		case NodeText:
@@ -430,6 +431,7 @@ func (st *Runtime) executeList(list *ListNode) (returnValue reflect.Value) {
 			}
 			if node.Pipe != nil {
 				v, safeWriter := st.evalPipelineExpression(node.Pipe)
+				log.Println(v, safeWriter)
 				if !safeWriter && v.IsValid() {
 					if v.Type().Implements(rendererType) {
 						v.Interface().(Renderer).Render(st)
@@ -688,6 +690,16 @@ func (st *Runtime) evalPrimaryExpressionGroup(node Expression) reflect.Value {
 			node.error(err)
 		}
 		return resolved
+	case NodeIndexNullableExpr:
+		node := node.(*IndexNullableExprNode)
+		base := st.evalPrimaryExpressionGroup(node.Base)
+		index := st.evalPrimaryExpressionGroup(node.Index)
+
+		resolved, err := resolveIndexNullable(base, index, "")
+		if err != nil {
+			node.error(err)
+		}
+		return resolved
 	case NodeSliceExpr:
 		node := node.(*SliceExprNode)
 		baseExpression := st.evalPrimaryExpressionGroup(node.Base)
@@ -772,7 +784,7 @@ func (st *Runtime) isSet(node Node) (ok bool) {
 		resolved, err := st.evalChainNodeExpression(node)
 		return err == nil && notNil(resolved)
 	default:
-		//todo: maybe work some edge cases
+		// todo: maybe work some edge cases
 		if !(nodeType > beginExpressions && nodeType < endExpressions) {
 			node.errorf("unexpected %q node in isset clause", node)
 		}
@@ -1195,7 +1207,7 @@ func (st *Runtime) evalPipeCallExpression(baseExpr reflect.Value, args CallArgs,
 		return reflect.Value{}, fmt.Errorf("call expression: %v", err)
 	}
 
-	var returns = baseExpr.Call(argValues)
+	returns := baseExpr.Call(argValues)
 	if len(returns) == 0 {
 		return reflect.Value{}, nil
 	}
@@ -1376,9 +1388,11 @@ func (st *Runtime) evaluateArgs(fnType reflect.Type, args CallArgs, pipedArg *re
 func isUint(kind reflect.Kind) bool {
 	return kind >= reflect.Uint && kind <= reflect.Uint64
 }
+
 func isInt(kind reflect.Kind) bool {
 	return kind >= reflect.Int && kind <= reflect.Int64
 }
+
 func isFloat(kind reflect.Kind) bool {
 	return kind == reflect.Float32 || kind == reflect.Float64
 }
@@ -1509,8 +1523,10 @@ func castInt64(v reflect.Value) int64 {
 	return 0
 }
 
-var cachedStructsMutex = sync.RWMutex{}
-var cachedStructsFieldIndex = map[reflect.Type]map[string][]int{}
+var (
+	cachedStructsMutex      = sync.RWMutex{}
+	cachedStructsFieldIndex = map[reflect.Type]map[string][]int{}
+)
 
 // from text/template's exec.go:
 //
@@ -1655,7 +1671,131 @@ func resolveIndex(v, index reflect.Value, indexAsStr string) (reflect.Value, err
 			return reflect.Value{}, fmt.Errorf("can't use %s (%s) as key for map of type %s", indexAsStr, indexVal.Type(), v.Type())
 		}
 		index = indexVal.Convert(v.Type().Key()) // noop in most cases, but not expensive
-		return indirectEface(v.MapIndex(indexVal)), nil
+		value := v.MapIndex(indexVal)
+		if !value.IsValid() {
+			return reflect.Value{}, fmt.Errorf("key '%s' not found", indexAsStr)
+		}
+		return indirectEface(value), nil
+	case reflect.Ptr:
+		etyp := v.Type().Elem()
+		if etyp.Kind() == reflect.Struct && indexIsStr {
+			if _, ok := etyp.FieldByName(indexAsStr); !ok {
+				// If there's no such field, say "can't evaluate"
+				// instead of "nil pointer evaluating".
+				break
+			}
+		}
+		if isNil {
+			return reflect.Value{}, fmt.Errorf("nil pointer evaluating %s.%s", v.Type(), index)
+		}
+	}
+	return reflect.Value{}, fmt.Errorf("can't evaluate index %s (%s) in type %s", index, indexAsStr, getTypeString(v))
+}
+
+func resolveIndexNullable(v, index reflect.Value, indexAsStr string) (reflect.Value, error) {
+	if !v.IsValid() {
+		return reflect.Value{}, fmt.Errorf("there is no field or method '%s' in %s (%s)", index, v, getTypeString(v))
+	}
+
+	v, isNil := indirect(v)
+	if v.Kind() == reflect.Interface && isNil {
+		// Calling a method on a nil interface can't work. The
+		// MethodByName method call below would panic.
+		return reflect.Value{}, fmt.Errorf("nil pointer evaluating %s.%s", v.Type(), index)
+	}
+
+	// Handle the caller passing either index or indexAsStr.
+	indexIsStr := indexAsStr != ""
+	indexAsValue := func() reflect.Value { return index }
+	if indexIsStr {
+		// indexAsStr was specified, so make the indexAsValue function
+		// obtain the corresponding reflect.Value. This is only used in
+		// some code paths, and since it causes an allocation, a
+		// function is used instead of always extracting the
+		// reflect.Value.
+		indexAsValue = func() reflect.Value {
+			return reflect.ValueOf(indexAsStr)
+		}
+	} else {
+		// index was specified, so extract the string value if the index
+		// is in fact a string.
+		indexIsStr = index.Kind() == reflect.String
+		if indexIsStr {
+			indexAsStr = index.String()
+		}
+	}
+
+	// Unless it's an interface, need to get to a value of type *T to guarantee
+	// we see all methods of T and *T.
+	if indexIsStr {
+		ptr := v
+		if ptr.Kind() != reflect.Interface && ptr.Kind() != reflect.Ptr && ptr.CanAddr() {
+			ptr = ptr.Addr()
+		}
+		if method := ptr.MethodByName(indexAsStr); method.IsValid() {
+			return method, nil
+		}
+	}
+
+	// It's not a method on v; so now:
+	//  - if v is array/slice/string, use index as numeric index
+	//  - if v is a struct, use index as field name
+	//  - if v is a map, use index as key
+	//  - if v is (still) a pointer, indexing will fail but we check for nil to get a useful error
+	switch v.Kind() {
+	case reflect.Array, reflect.Slice, reflect.String:
+		indexVal := indexAsValue()
+		x, err := indexArg(indexVal, v.Len())
+		if err != nil {
+			return reflect.ValueOf(""), nil
+		}
+		return indirectEface(v.Index(x)), nil
+	case reflect.Struct:
+		if !indexIsStr {
+			return reflect.Value{}, fmt.Errorf("can't use %s (%s, not string) as field name in struct type %s", index, indexAsValue().Type(), v.Type())
+		}
+		typ := v.Type()
+		key := indexAsStr
+
+		// Fast path: use the struct cache to avoid allocations.
+		cachedStructsMutex.RLock()
+		cache, ok := cachedStructsFieldIndex[typ]
+		cachedStructsMutex.RUnlock()
+		if !ok {
+			cachedStructsMutex.Lock()
+			if cache, ok = cachedStructsFieldIndex[typ]; !ok {
+				cache = make(map[string][]int)
+				buildCache(typ, cache, nil)
+				cachedStructsFieldIndex[typ] = cache
+			}
+			cachedStructsMutex.Unlock()
+		}
+		if id, ok := cache[key]; ok {
+			return v.FieldByIndex(id), nil
+		}
+
+		// Slow path: use reflect directly
+		tField, ok := typ.FieldByName(key)
+		if ok {
+			field := v.FieldByIndex(tField.Index)
+			if tField.PkgPath != "" { // field is unexported
+				return reflect.Value{}, fmt.Errorf("%s is an unexported field of struct type %s", indexAsStr, v.Type())
+			}
+			return indirectEface(field), nil
+		}
+		return reflect.ValueOf(""), nil
+	case reflect.Map:
+		// If it's a map, attempt to use the field name as a key.
+		indexVal := indexAsValue()
+		if !indexVal.Type().ConvertibleTo(v.Type().Key()) {
+			return reflect.Value{}, fmt.Errorf("can't use %s (%s) as key for map of type %s", indexAsStr, indexVal.Type(), v.Type())
+		}
+		index = indexVal.Convert(v.Type().Key()) // noop in most cases, but not expensive
+		value := v.MapIndex(indexVal)
+		if !value.IsValid() {
+			return reflect.ValueOf(""), nil
+		}
+		return indirectEface(value), nil
 	case reflect.Ptr:
 		etyp := v.Type().Elem()
 		if etyp.Kind() == reflect.Struct && indexIsStr {

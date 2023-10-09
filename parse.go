@@ -260,7 +260,7 @@ func (t *Template) parseTemplate(cacheAfterParsing bool) (next Node) {
 	for t.peek().typ != itemEOF {
 		delim := t.next()
 		if delim.typ == itemText && strings.TrimSpace(delim.val) == "" {
-			continue //skips empty text nodes
+			continue // skips empty text nodes
 		}
 		if delim.typ == itemLeftDelim {
 			token := t.nextNonSpace()
@@ -485,7 +485,9 @@ func (t *Template) parseReturn() Node {
 }
 
 // itemList:
+//
 //	textOrAction*
+//
 // Terminates at any of the given nodes, returned separately.
 func (t *Template) itemList(terminatedBy ...NodeType) (list *ListNode, next Node) {
 	list = t.newList(t.peekNonSpace().pos)
@@ -503,6 +505,7 @@ func (t *Template) itemList(terminatedBy ...NodeType) (list *ListNode, next Node
 }
 
 // textOrAction:
+//
 //	text | action
 func (t *Template) textOrAction() Node {
 	switch token := t.nextNonSpace(); token.typ {
@@ -781,7 +784,9 @@ func (t *Template) command(baseExpr Expression) *CommandNode {
 }
 
 // operand:
+//
 //	term .Field*
+//
 // An operand is a space-separated component of a command,
 // a term possibly followed by field accesses.
 // A nil return means the next item is not an operand.
@@ -814,8 +819,10 @@ RESET:
 	if nodeTYPE == NodeIdentifier ||
 		nodeTYPE == NodeCallExpr ||
 		nodeTYPE == NodeField ||
+		nodeTYPE == NodeNullableField ||
 		nodeTYPE == NodeChain ||
-		nodeTYPE == NodeIndexExpr {
+		nodeTYPE == NodeIndexExpr ||
+		nodeTYPE == NodeIndexNullableExpr {
 		switch t.nextNonSpace().typ {
 		case itemLeftParen:
 			callExpr := t.newCallExpr(node.Position(), t.lex.lineNumber(), node)
@@ -828,7 +835,7 @@ RESET:
 			var index Expression
 			var next item
 
-			//found colon is slice expression
+			// found colon is slice expression
 			if t.peekNonSpace().typ != itemColon {
 				index, next = t.parseExpression("index|slice expression")
 			} else {
@@ -844,6 +851,28 @@ RESET:
 				node = t.newSliceExpr(node.Position(), node.line(), base, index, endIndex)
 			case itemRightBrackets:
 				node = t.newIndexExpr(node.Position(), node.line(), base, index)
+				fallthrough
+			default:
+				t.backup()
+			}
+
+			t.expect(itemRightBrackets, "index expression", "closing bracket")
+			goto RESET
+		case itemLeftNullableBrackets:
+			base := node
+			var index Expression
+			var next item
+
+			// found colon is slice expression
+			if t.peekNonSpace().typ != itemColon {
+				index, next = t.parseExpression("index|slice expression")
+			} else {
+				next = t.nextNonSpace()
+			}
+
+			switch next.typ {
+			case itemRightBrackets:
+				node = t.newIndexNullableExpr(node.Position(), node.line(), base, index)
 				fallthrough
 			default:
 				t.backup()
@@ -930,37 +959,47 @@ func (t *Template) parseControl(allowElseIf bool, context string) (pos Pos, line
 }
 
 // If:
+//
 //	{{if expression}} itemList {{end}}
 //	{{if expression}} itemList {{else}} itemList {{end}}
+//
 // If keyword is past.
 func (t *Template) ifControl() Node {
 	return t.newIf(t.parseControl(true, "if"))
 }
 
 // Range:
+//
 //	{{range expression}} itemList {{end}}
 //	{{range expression}} itemList {{else}} itemList {{end}}
+//
 // Range keyword is past.
 func (t *Template) rangeControl() Node {
 	return t.newRange(t.parseControl(false, "range"))
 }
 
 // End:
+//
 //	{{end}}
+//
 // End keyword is past.
 func (t *Template) endControl() Node {
 	return t.newEnd(t.expectRightDelim("end").pos)
 }
 
 // Content:
+//
 //	{{content}}
+//
 // Content keyword is past.
 func (t *Template) contentControl() Node {
 	return t.newContent(t.expectRightDelim("content").pos)
 }
 
 // Else:
+//
 //	{{else}}
+//
 // Else keyword is past.
 func (t *Template) elseControl() Node {
 	// Special case for "else if".
@@ -973,11 +1012,13 @@ func (t *Template) elseControl() Node {
 }
 
 // Try-catch:
-//	{{try}}
-//    itemList
-//  {{catch <ident>}}
-//    itemList
-//  {{end}}
+//
+//		{{try}}
+//	   itemList
+//	 {{catch <ident>}}
+//	   itemList
+//	 {{end}}
+//
 // try keyword is past.
 func (t *Template) parseTry() *TryNode {
 	var recov *catchNode
@@ -992,9 +1033,11 @@ func (t *Template) parseTry() *TryNode {
 }
 
 // catch:
-//  {{catch <ident>}}
-//    itemList
-//  {{end}}
+//
+//	{{catch <ident>}}
+//	  itemList
+//	{{end}}
+//
 // catch keyword is past.
 func (t *Template) parseCatch() *catchNode {
 	line := t.lex.lineNumber()
@@ -1013,12 +1056,17 @@ func (t *Template) parseCatch() *catchNode {
 }
 
 // term:
+//
 //	literal (number, string, nil, boolean)
 //	function (identifier)
 //	.
 //	.Field
+//
+// ?.Field
+//
 //	variable
 //	'(' expression ')'
+//
 // A term is a simple "expression".
 // A nil return means the next item is not a term.
 func (t *Template) term() Node {

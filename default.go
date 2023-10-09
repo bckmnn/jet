@@ -182,8 +182,10 @@ type hiddenBool bool
 
 func (m hiddenBool) Render(r *Runtime) { /* render nothing -> hidden */ }
 
-var hiddenTrue = reflect.ValueOf(hiddenBool(true))
-var hiddenFalse = reflect.ValueOf(hiddenBool(false))
+var (
+	hiddenTrue  = reflect.ValueOf(hiddenBool(true))
+	hiddenFalse = reflect.ValueOf(hiddenBool(false))
+)
 
 func jsonRenderer(v interface{}) RendererFunc {
 	return func(r *Runtime) {

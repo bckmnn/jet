@@ -28,6 +28,10 @@ func (t *Template) newIndexExpr(pos Pos, line int, base, index Expression) *Inde
 	return &IndexExprNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeIndexExpr, Pos: pos, Line: line}, Index: index, Base: base}
 }
 
+func (t *Template) newIndexNullableExpr(pos Pos, line int, base, index Expression) *IndexNullableExprNode {
+	return &IndexNullableExprNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeIndexNullableExpr, Pos: pos, Line: line}, Index: index, Base: base}
+}
+
 func (t *Template) newTernaryExpr(pos Pos, line int, boolean, left, right Expression) *TernaryExprNode {
 	return &TernaryExprNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeTernaryExpr, Pos: pos, Line: line}, Boolean: boolean, Left: left, Right: right}
 }
@@ -39,9 +43,11 @@ func (t *Template) newSet(pos Pos, line int, isLet, isIndexExprGetLookup bool, l
 func (t *Template) newCallExpr(pos Pos, line int, expr Expression) *CallExprNode {
 	return &CallExprNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeCallExpr, Pos: pos, Line: line}, BaseExpr: expr}
 }
+
 func (t *Template) newNotExpr(pos Pos, line int, expr Expression) *NotExprNode {
 	return &NotExprNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeNotExpr, Pos: pos, Line: line}, Expr: expr}
 }
+
 func (t *Template) newNumericComparativeExpr(pos Pos, line int, left, right Expression, item item) *NumericComparativeExprNode {
 	return &NumericComparativeExprNode{binaryExprNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeNumericComparativeExpr, Pos: pos, Line: line}, Operator: item, Left: left, Right: right}}
 }
@@ -162,11 +168,11 @@ func (t *Template) newNumber(pos Pos, text string, typ itemType) (*NumberNode, e
 		n.IsInt = true
 		n.Uint64 = uint64(_rune)
 		n.IsUint = true
-		n.Float64 = float64(_rune) //odd but those are the rules.
+		n.Float64 = float64(_rune) // odd but those are the rules.
 		n.IsFloat = true
 		return n, nil
 	case itemComplex:
-		//fmt.Sscan can parse the pair, so let it do the work.
+		// fmt.Sscan can parse the pair, so let it do the work.
 		if _, err := fmt.Sscan(text, &n.Complex128); err != nil {
 			return nil, err
 		}
@@ -174,7 +180,7 @@ func (t *Template) newNumber(pos Pos, text string, typ itemType) (*NumberNode, e
 		n.simplifyComplex()
 		return n, nil
 	}
-	//Imaginary constants can only be complex unless they are zero.
+	// Imaginary constants can only be complex unless they are zero.
 	if len(text) > 0 && text[len(text)-1] == 'i' {
 		f, err := strconv.ParseFloat(text[:len(text)-1], 64)
 		if err == nil {

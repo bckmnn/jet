@@ -35,7 +35,6 @@ func (vc VisitorContext) visitNode(node jet.Node) {
 }
 
 func (vc VisitorContext) Visit(node jet.Node) {
-
 	switch node := node.(type) {
 	case *jet.ListNode:
 		vc.visitListNode(node)
@@ -77,6 +76,8 @@ func (vc VisitorContext) Visit(node jet.Node) {
 		vc.visitTernaryExprNode(node)
 	case *jet.IndexExprNode:
 		vc.visitIndexExprNode(node)
+	case *jet.IndexNullableExprNode:
+		vc.visitIndexNullableExprNode(node)
 	case *jet.SliceExprNode:
 		vc.visitSliceExprNode(node)
 	case *jet.TextNode:
@@ -97,7 +98,6 @@ func (vc VisitorContext) visitIncludeNode(includeNode *jet.IncludeNode) {
 }
 
 func (vc VisitorContext) visitBlockNode(blockNode *jet.BlockNode) {
-
 	for _, node := range blockNode.Parameters.List {
 		if node.Expression != nil {
 			vc.visitNode(node.Expression)
@@ -128,6 +128,7 @@ func (vc VisitorContext) visitPipeNode(pipeNode *jet.PipeNode) {
 func (vc VisitorContext) visitIfNode(ifNode *jet.IfNode) {
 	vc.visitBranchNode(&ifNode.BranchNode)
 }
+
 func (vc VisitorContext) visitBranchNode(branchNode *jet.BranchNode) {
 	if branchNode.Set != nil {
 		vc.visitNode(branchNode.Set)
@@ -211,6 +212,11 @@ func (vc VisitorContext) visitTernaryExprNode(ternaryExprNode *jet.TernaryExprNo
 func (vc VisitorContext) visitIndexExprNode(indexNode *jet.IndexExprNode) {
 	vc.visitNode(indexNode.Base)
 	vc.visitNode(indexNode.Index)
+}
+
+func (vc VisitorContext) visitIndexNullableExprNode(indexNullableNode *jet.IndexNullableExprNode) {
+	vc.visitNode(indexNullableNode.Base)
+	vc.visitNode(indexNullableNode.Index)
 }
 
 func (vc VisitorContext) visitSliceExprNode(sliceExprNode *jet.SliceExprNode) {

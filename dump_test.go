@@ -61,7 +61,7 @@ func TestDump(t *testing.T) {
 		t.Log("expected to get two parts, did you include separator in the template?")
 		t.FailNow()
 	}
-	//t.Log(rslt[0])
+	// t.Log(rslt[0])
 	// compare what we got with what we wanted
 	got := strings.Split(rslt[0], "\n")
 	want := strings.Split(rslt[1], "\n")

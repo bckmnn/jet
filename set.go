@@ -109,9 +109,10 @@ func InDevelopmentMode() Option {
 //
 // For example, GetTemplate("catalog/products.list") with extensions set to []string{"", ".html.jet",".jet"}
 // will try to look for:
-//     1. catalog/products.list
-//     2. catalog/products.list.html.jet
-//     3. catalog/products.list.jet
+//  1. catalog/products.list
+//  2. catalog/products.list.html.jet
+//  3. catalog/products.list.jet
+//
 // in the set's templates cache, and if it can't find the template it will try to load the same paths via
 // the loader, and, if parsed successfully, cache the template (unless running in development mode).
 func (s *Set) GetTemplate(templatePath string) (t *Template, err error) {

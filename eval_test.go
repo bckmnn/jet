@@ -157,7 +157,7 @@ func (user *User) GetName() string {
 }
 
 func TestEvalActionNode(t *testing.T) {
-	var data = make(VarMap)
+	data := make(VarMap)
 
 	data.Set("user", &User{
 		"José Santos", "email@example.com",
@@ -195,7 +195,7 @@ func TestEvalActionNode(t *testing.T) {
 	RunJetTest(t, data, nil, "actionNode_NumberNegative", `{{ -5 }}`, "-5")
 	RunJetTest(t, data, nil, "actionNode_NumberNegative_1", `{{ 1 + -5 }}`, fmt.Sprint(1+-5))
 
-	//this must be an error RunJetTest(t, data, nil, "actionNode_AddStringInt", `{{ "1"-2 }}`, "12")
+	// this must be an error RunJetTest(t, data, nil, "actionNode_AddStringInt", `{{ "1"-2 }}`, "12")
 
 	RunJetTest(t, data, nil, "actionNode_Mult", `{{ 4*4 }}`, fmt.Sprint(4*4))
 	RunJetTest(t, data, nil, "actionNode_MultAdd", `{{ 2+4*4 }}`, fmt.Sprint(2+4*4))
@@ -252,7 +252,7 @@ func TestEvalActionNode(t *testing.T) {
 }
 
 func TestEvalIfNode(t *testing.T) {
-	var data = make(VarMap)
+	data := make(VarMap)
 	data.Set("lower", strings.ToLower)
 	data.Set("upper", strings.ToUpper)
 	data.Set("repeat", strings.Repeat)
@@ -266,11 +266,10 @@ func TestEvalIfNode(t *testing.T) {
 	RunJetTest(t, data, nil, "ifNode_elseif", `{{if false}}hello{{else if true}}world{{end}}`, `world`)
 	RunJetTest(t, data, nil, "ifNode_elseif_else", `{{if false}}hello{{else if false}}world{{else}}buddy{{end}}`, `buddy`)
 	RunJetTest(t, data, nil, "ifNode_string_comparison", `{{user["Name"]}} (email: {{user.Email}}): {{if user.Email == "email2@example.com"}}email is email2@example.com{{else}}email is not email2@example.com{{end}}`, `José Santos (email: email@example.com): email is not email2@example.com`)
-
 }
 
 func TestEvalBlockYieldIncludeNode(t *testing.T) {
-	var data = make(VarMap)
+	data := make(VarMap)
 
 	data.Set("user", &User{
 		"José Santos", "email@example.com",
@@ -328,8 +327,7 @@ func TestEvalBlockYieldIncludeNode(t *testing.T) {
 }
 
 func TestEvalRangeNode(t *testing.T) {
-
-	var data = make(VarMap)
+	data := make(VarMap)
 
 	data.Set("users", []User{
 		{"Mario Santos", "mario@gmail.com"},
@@ -340,7 +338,7 @@ func TestEvalRangeNode(t *testing.T) {
 	const resultString = `<h1>Mario Santos<small>mario@gmail.com</small></h1><h1>Joel Silva<small>joelsilva@gmail.com</small></h1><h1>Luis Santana<small>luis.santana@gmail.com</small></h1>`
 	RunJetTest(t, data, nil, "Range_Expression", `{{range users}}<h1>{{.Name}}<small>{{.Email}}</small></h1>{{end}}`, resultString)
 	RunJetTest(t, data, nil, "Range_ExpressionValue", `{{range _,user:=users}}<h1>{{user.Name}}<small>{{user.Email}}</small></h1>{{end}}`, resultString)
-	var resultString2 = `<h1>0: Mario Santos<small>mario@gmail.com</small></h1><h1>Joel Silva<small>joelsilva@gmail.com</small></h1><h1>2: Luis Santana<small>luis.santana@gmail.com</small></h1>`
+	resultString2 := `<h1>0: Mario Santos<small>mario@gmail.com</small></h1><h1>Joel Silva<small>joelsilva@gmail.com</small></h1><h1>2: Luis Santana<small>luis.santana@gmail.com</small></h1>`
 	RunJetTest(t, data, nil, "Range_ExpressionValueIf", `{{range i, user:=users}}<h1>{{if i == 0 || i == 2}}{{i}}: {{end}}{{user.Name}}<small>{{user.Email}}</small></h1>{{end}}`, resultString2)
 }
 
@@ -362,7 +360,7 @@ func TestEvalDefaultFuncs(t *testing.T) {
 		"My_Name_Is_II",
 	)
 
-	var data = make(VarMap)
+	data := make(VarMap)
 
 	data.Set("m", map[string]interface{}{
 		"arr":      []string{"foo", "bar"},
@@ -375,7 +373,7 @@ func TestEvalDefaultFuncs(t *testing.T) {
 }
 
 func TestEvalIssetAndTernaryExpression(t *testing.T) {
-	var data = make(VarMap)
+	data := make(VarMap)
 	data.Set("title", "title")
 	RunJetTest(t, nil, nil, "IssetExpression_1", `{{isset(value)}}`, "false")
 	RunJetTest(t, data, nil, "IssetExpression_2", `{{isset(title)}}`, "true")
@@ -417,7 +415,7 @@ func TestEvalIndexExpression(t *testing.T) {
 		},
 	})
 
-	//RunJetTest(t, vars, nil, "IndexExpressionMap_6", `{{nested.nested.nested.nested.name}}`, "value")
+	// RunJetTest(t, vars, nil, "IndexExpressionMap_6", `{{nested.nested.nested.nested.name}}`, "value")
 	// todo: this test is failing with race detector enabled, but looks like a bug when running with the race detector enabled
 	RunJetTest(t, vars, nil, "IndexExpressionMap_7", `{{nested.nested.nested.nested.strings[0]}}`, "hello")
 	RunJetTest(t, vars, nil, "IndexExpressionMap_8", `{{nested.nested.nested.nested.arr[0]}}`, "hello")
@@ -455,7 +453,7 @@ func (st *StringerType) String() string {
 }
 
 func TestEvalPointerExpressions(t *testing.T) {
-	var data = make(VarMap)
+	data := make(VarMap)
 	var s *string
 	data.Set("stringPointer", s)
 	RunJetTest(t, data, nil, "StringPointer_1", `{{ stringPointer }}`, "<nil>")
@@ -497,7 +495,7 @@ func TestEvalPointerExpressions(t *testing.T) {
 }
 
 func TestEvalPointerLimitNumberOfDereferences(t *testing.T) {
-	var data = make(VarMap)
+	data := make(VarMap)
 
 	var i *int
 	data.Set("intPointer", &i)
@@ -521,7 +519,6 @@ func (a *Apple) GetFlavorPtr() *string {
 }
 
 func TestApple(t *testing.T) {
-
 	apples := map[string]*Apple{
 		"honeycrisp": {
 			Flavor: "crisp",
@@ -534,7 +531,7 @@ func TestApple(t *testing.T) {
 		},
 	}
 
-	var data = make(VarMap)
+	data := make(VarMap)
 	data.SetFunc("GetAppleByName", func(a Arguments) reflect.Value {
 		name := a.Get(0).String()
 		return reflect.ValueOf(apples[name])
@@ -550,7 +547,7 @@ func TestApple(t *testing.T) {
 }
 
 func TestEvalStructFieldPointerExpressions(t *testing.T) {
-	var data = make(VarMap)
+	data := make(VarMap)
 
 	type structWithPointers struct {
 		StringField *string
@@ -584,7 +581,7 @@ func TestEvalStructFieldPointerExpressions(t *testing.T) {
 	RunJetTest(t, data, nil, "PointerFields_6", `{{ structWithPointerFields2.StringField }}`, "test")
 	RunJetTest(t, data, nil, "PointerFields_7", `{{ structWithPointerFields2.StructField }}`, "<nil>")
 
-	var set = NewSet(NewOSFileSystemLoader("./testData"), WithSafeWriter(nil))
+	set := NewSet(NewOSFileSystemLoader("./testData"), WithSafeWriter(nil))
 	tt, err := set.parse("PointerFields_8", `{{ structWithPointerFields2.StructField.StringField }}`, false)
 	if err != nil {
 		t.Error(err)
@@ -597,7 +594,7 @@ func TestEvalStructFieldPointerExpressions(t *testing.T) {
 }
 
 func TestEvalBuiltinExpression(t *testing.T) {
-	var data = make(VarMap)
+	data := make(VarMap)
 	RunJetTest(t, data, nil, "LenExpression_1", `{{len("111")}}`, "3")
 	RunJetTest(t, data, nil, "LenExpression_2", `{{isset(data)?len(data):0}}`, "0")
 	RunJetTest(t, data, []string{"", "", "", ""}, "LenExpression_3", `{{len(.)}}`, "4")
@@ -621,7 +618,6 @@ func TestEvalBuiltinExpression(t *testing.T) {
 	)
 	RunJetTest(t, data, nil, "IsSetExpression_14", `{{isset(foo.asd[0].bar)}}`, "false")
 	RunJetTest(t, data, nil, "IsSetExpression_pipeline", `{{foo | isset}}`, "true")
-
 }
 
 func TestEvalAutoescape(t *testing.T) {
@@ -731,7 +727,7 @@ func TestRanger(t *testing.T) {
 		}
 		close(c)
 	}()
-	var data = make(VarMap)
+	data := make(VarMap)
 	data.Set(
 		"m", map[string]interface{}{
 			"asd": 123,
@@ -869,11 +865,10 @@ func BenchmarkNewBlockYield(b *testing.B) {
 			}
 		}
 	})
-
 }
 
 func BenchmarkDynamicFunc(b *testing.B) {
-	var variables = VarMap{}.Set("dummy", dummy)
+	variables := VarMap{}.Set("dummy", dummy)
 	t, _ := JetTestingSet.GetTemplate("actionNode_dummy")
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -885,7 +880,7 @@ func BenchmarkDynamicFunc(b *testing.B) {
 }
 
 func BenchmarkJetFunc(b *testing.B) {
-	var variables = VarMap{}.SetFunc("dummy", func(a Arguments) reflect.Value {
+	variables := VarMap{}.SetFunc("dummy", func(a Arguments) reflect.Value {
 		return reflect.ValueOf(dummy(a.Get(0).String()))
 	})
 	t, _ := JetTestingSet.GetTemplate("actionNode_dummy")
@@ -987,7 +982,6 @@ func BenchmarkCallCustomFn(b *testing.B) {
 	if err != nil {
 		b.Error(err.Error())
 	}
-
 }
 
 // BenchmarkExecPipeline benchmarks executing a template that calls a pipeline
@@ -1000,7 +994,6 @@ func BenchmarkExecPipeline(b *testing.B) {
 	if err != nil {
 		b.Error(err.Error())
 	}
-
 }
 
 // BenchmarkFieldAccess benchmarks executing a template that accesses fields

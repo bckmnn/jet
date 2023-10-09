@@ -4,7 +4,6 @@ import "sync"
 
 // Cache is the interface Jet uses to store and retrieve parsed templates.
 type Cache interface {
-
 	// Get fetches a template from the cache. If Get returns nil, the same path with a different extension will be tried.
 	// If Get() returns nil for all configured extensions, the same path and extensions will be tried on the Set's Loader.
 	Get(templatePath string) *Template

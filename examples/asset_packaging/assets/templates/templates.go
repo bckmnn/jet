@@ -1,3 +1,4 @@
+//go:build !deploy_build
 // +build !deploy_build
 
 package templates

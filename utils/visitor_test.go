@@ -40,8 +40,7 @@ func TestSimpleTemplate(t *testing.T) {
 	)
 
 	Walk(mTemplate, VisitorFunc(func(context VisitorContext, node jet.Node) {
-
-		var stackState = len(localVariables) // saves the state of the local identifiers map
+		stackState := len(localVariables) // saves the state of the local identifiers map
 
 		switch node := node.(type) {
 		case *jet.SetNode:
@@ -92,7 +91,6 @@ func TestSimpleTemplate(t *testing.T) {
 			// restore local identifiers map
 			localVariables = localVariables[0:stackState]
 		}
-
 	}))
 
 	if !reflect.DeepEqual(externalVariables, []string{"userName", "products", "ExpensiveProduct"}) {

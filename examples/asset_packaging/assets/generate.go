@@ -1,3 +1,4 @@
+//go:build ignore
 // +build ignore
 
 package main
@@ -12,7 +13,7 @@ import (
 )
 
 func main() {
-	var cwd, _ = os.Getwd()
+	cwd, _ := os.Getwd()
 	templates := http.Dir(filepath.Join(cwd, "views"))
 	if err := vfsgen.Generate(templates, vfsgen.Options{
 		Filename:     "assets/templates/templates_vfsdata.go",

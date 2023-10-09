@@ -13,6 +13,7 @@
 // limitations under the License.
 
 // +Build ignore
+//
 //go:generate go run assets/generate.go
 package main
 

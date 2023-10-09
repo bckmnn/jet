@@ -52,18 +52,19 @@ const (
 	itemCharConstant                 // character constant
 	itemComplex                      // complex constant (1+2i); imaginary is just a number
 	itemEOF
-	itemField      // alphanumeric identifier starting with '.'
-	itemIdentifier // alphanumeric identifier not starting with '.'
-	itemLeftDelim  // left action delimiter
-	itemLeftParen  // '(' inside action
-	itemNumber     // simple number, including imaginary
-	itemPipe       // pipe symbol
-	itemRawString  // raw quoted string (includes quotes)
-	itemRightDelim // right action delimiter
-	itemRightParen // ')' inside action
-	itemSpace      // run of spaces separating arguments
-	itemString     // quoted string (includes quotes)
-	itemText       // plain text
+	itemField         // alphanumeric identifier starting with '.'
+	itemNullableField // alphanumeric identifier starting with '?.'
+	itemIdentifier    // alphanumeric identifier not starting with '.'
+	itemLeftDelim     // left action delimiter
+	itemLeftParen     // '(' inside action
+	itemNumber        // simple number, including imaginary
+	itemPipe          // pipe symbol
+	itemRawString     // raw quoted string (includes quotes)
+	itemRightDelim    // right action delimiter
+	itemRightParen    // ')' inside action
+	itemSpace         // run of spaces separating arguments
+	itemString        // quoted string (includes quotes)
+	itemText          // plain text
 	itemAssign
 	itemEquals
 	itemNotEquals
@@ -81,6 +82,7 @@ const (
 	itemColon
 	itemTernary
 	itemLeftBrackets
+	itemLeftNullableBrackets
 	itemRightBrackets
 	itemUnderscore
 	// Keywords appear after all the rest.
@@ -435,7 +437,21 @@ func lexInsideAction(l *lexer) stateFn {
 		}
 		l.emit(itemAdd)
 	case r == '?':
-		l.emit(itemTernary)
+		switch l.next() {
+		case '[':
+			l.emit(itemLeftNullableBrackets)
+		case '.':
+			// special look-ahead for ".field" so we don't break l.backup().
+			if l.pos < Pos(len(l.input)) {
+				r := l.input[l.pos]
+				if r < '0' || '9' < r {
+					return lexNullableField(l)
+				}
+			}
+		default:
+			l.backup()
+			l.emit(itemTernary)
+		}
 	case r == '&':
 		if l.next() == '&' {
 			l.emit(itemAnd)
@@ -583,7 +599,6 @@ Loop:
 // lexField scans a field: .Alphanumeric.
 // The . has been scanned.
 func lexField(l *lexer) stateFn {
-
 	if l.atTerminator() {
 		// Nothing interesting follows -> "." or "$".
 		l.emit(itemIdentifier)
@@ -602,6 +617,30 @@ func lexField(l *lexer) stateFn {
 		return l.errorf("bad character %#U", r)
 	}
 	l.emit(itemField)
+	return lexInsideAction
+}
+
+// lexNullableField scans a field: ?.Alphanumeric.
+// The ?. has been scanned.
+func lexNullableField(l *lexer) stateFn {
+	if l.atTerminator() {
+		// Nothing interesting follows -> "." or "$".
+		l.emit(itemIdentifier)
+		return lexInsideAction
+	}
+
+	var r rune
+	for {
+		r = l.next()
+		if !isAlphaNumeric(r) {
+			l.backup()
+			break
+		}
+	}
+	if !l.atTerminator() {
+		return l.errorf("bad character %#U", r)
+	}
+	l.emit(itemNullableField)
 	return lexInsideAction
 }
 
@@ -677,9 +716,9 @@ func (l *lexer) scanNumber() bool {
 		l.accept("+-")
 		l.acceptRun("0123456789")
 	}
-	//Is it imaginary?
+	// Is it imaginary?
 	l.accept("i")
-	//Next thing mustn't be alphanumeric.
+	// Next thing mustn't be alphanumeric.
 	if isAlphaNumeric(l.peek()) {
 		l.next()
 		return false
