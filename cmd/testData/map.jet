@@ -1,2 +1,2 @@
-{{ m := map("foo", "bar") }}
-{{ m.bar }}
+{{ m := map("foo", map("bar", "far")) }}
+{{ m.foo.bar }}

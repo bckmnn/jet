@@ -17,6 +17,7 @@ package jet
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"path/filepath"
 )
 
@@ -72,16 +73,15 @@ func (t NodeType) Type() NodeType {
 }
 
 const (
-	NodeText          NodeType = iota // Plain text.
-	NodeAction                        // A non-control action such as a field evaluation.
-	NodeChain                         // A sequence of field accesses.
-	NodeCommand                       // An element of a pipeline.
-	NodeField                         // A field or method name.
-	NodeNullableField                 // A field or method name.
-	NodeIdentifier                    // An identifier; always a function name.
-	NodeUnderscore                    // An underscore (discard in assignment, or slot in argument list for piped value)
-	NodeList                          // A list of Nodes.
-	NodePipe                          // A pipeline of commands.
+	NodeText       NodeType = iota // Plain text.
+	NodeAction                     // A non-control action such as a field evaluation.
+	NodeChain                      // A sequence of field accesses.
+	NodeCommand                    // An element of a pipeline.
+	NodeField                      // A field or method name.
+	NodeIdentifier                 // An identifier; always a function name.
+	NodeUnderscore                 // An underscore (discard in assignment, or slot in argument list for piped value)
+	NodeList                       // A list of Nodes.
+	NodePipe                       // A pipeline of commands.
 	NodeSet
 	// NodeWith                       //A with action.
 	NodeInclude
@@ -109,7 +109,6 @@ const (
 	NodeNotExpr
 	NodeTernaryExpr
 	NodeIndexExpr
-	NodeIndexNullableExpr
 	NodeSliceExpr
 	endExpressions
 )
@@ -244,29 +243,33 @@ func (n *NilNode) String() string {
 // The period is dropped from each ident.
 type FieldNode struct {
 	NodeBase
-	Ident []string // The identifiers in lexical order.
+	Idents Idents // The identifiers in lexical order.
+}
+
+type Ident struct {
+	name     string
+	nullable bool
+}
+
+type Idents []Ident
+
+func (i Idents) names() []string {
+	names := make([]string, 0, len(i))
+	for _, id := range i {
+		names = append(names, id.name)
+	}
+	return names
 }
 
 func (f *FieldNode) String() string {
 	s := ""
-	for _, id := range f.Ident {
-		s += "." + id
-	}
-	return s
-}
-
-// NullableFieldNode holds a field (identifier starting with '?.').
-// The names may be chained ('?.x?.y').
-// The period is dropped from each ident.
-type NullableFieldNode struct {
-	NodeBase
-	Ident []string // The identifiers in lexical order.
-}
-
-func (l *NullableFieldNode) String() string {
-	s := ""
-	for _, id := range l.Ident {
-		s += "?." + id
+	for _, id := range f.Idents {
+		if id.nullable {
+			s += "?."
+		} else {
+			s += "."
+		}
+		s += id.name
 	}
 	return s
 }
@@ -277,19 +280,32 @@ func (l *NullableFieldNode) String() string {
 type ChainNode struct {
 	NodeBase
 	Node  Node
-	Field []string // The identifiers in lexical order.
+	Field Idents // The identifiers in lexical order.
 }
 
 // Add adds the named field (which should start with a period) to the end of the chain.
 func (c *ChainNode) Add(field string) {
-	if len(field) == 0 || field[0] != '.' {
+	log.Println("field", field)
+	var nullable bool
+	if len(field) == 0 || (field[0] != '.' && (field[0] != '?' && field[1] != '.')) {
 		panic("no dot in field")
 	}
-	field = field[1:] // Remove leading dot.
+	if field[0] == '?' && field[1] == '.' {
+		nullable = true
+	}
+	// todo
+	if nullable {
+		field = field[2:] // Remove leading dot.
+	} else {
+		field = field[1:] // Remove leading dot.
+	}
 	if field == "" {
 		panic("empty field")
 	}
-	c.Field = append(c.Field, field)
+	c.Field = append(c.Field, Ident{
+		name:     field,
+		nullable: nullable,
+	})
 }
 
 func (c *ChainNode) String() string {
@@ -297,8 +313,11 @@ func (c *ChainNode) String() string {
 	if _, ok := c.Node.(*PipeNode); ok {
 		s = "(" + s + ")"
 	}
-	for _, field := range c.Field {
-		s += "." + field
+	for _, id := range c.Field {
+		if id.nullable {
+			s += "?"
+		}
+		s += "." + id.name
 	}
 	return s
 }
@@ -682,16 +701,6 @@ func (s *IndexExprNode) String() string {
 		nullable = "?"
 	}
 	return fmt.Sprintf("%s%s[%s]", s.Base, nullable, s.Index)
-}
-
-type IndexNullableExprNode struct {
-	NodeBase
-	Base  Expression
-	Index Expression
-}
-
-func (s *IndexNullableExprNode) String() string {
-	return fmt.Sprintf("%s?[%s]", s.Base, s.Index)
 }
 
 type SliceExprNode struct {

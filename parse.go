@@ -795,8 +795,39 @@ func (t *Template) operand(context string) Expression {
 	if node == nil {
 		t.unexpected(t.next(), context, "term")
 	}
+	lefBracketHandler := func(node Node, nullable bool) Node {
+		base := node
+		var index Expression
+		var next item
+
+		// found colon is slice expression
+		if t.peekNonSpace().typ != itemColon {
+			index, next = t.parseExpression("index|slice expression")
+		} else {
+			next = t.nextNonSpace()
+		}
+
+		switch next.typ {
+		case itemColon:
+			var endIndex Expression
+			if t.peekNonSpace().typ != itemRightBrackets {
+				endIndex = t.expression("slice expression", "end indexß")
+			}
+			node = t.newSliceExpr(node.Position(), node.line(), base, index, endIndex)
+		case itemRightBrackets:
+			node = t.newIndexExpr(node.Position(), node.line(), base, index, nullable)
+			fallthrough
+		default:
+			t.backup()
+		}
+
+		t.expect(itemRightBrackets, "index expression", "closing bracket")
+
+		return node
+	}
 RESET:
-	if t.peek().typ == itemField {
+	peek := t.peek()
+	if peek.typ == itemField || peek.typ == itemNullableField {
 		chain := t.newChain(t.peek().pos, node)
 		for t.peekNonSpace().typ == itemField {
 			chain.Add(t.next().val)
@@ -808,7 +839,7 @@ RESET:
 		// More complex error cases will have to be handled at execution time.
 		switch node.Type() {
 		case NodeField:
-			node = t.newField(chain.Position(), chain.String())
+			node = t.newField(chain.Position(), chain.String(), peek.typ == itemNullableField)
 		case NodeBool, NodeString, NodeNumber, NodeNil:
 			t.errorf("unexpected . after term %q", node.String())
 		default:
@@ -819,10 +850,8 @@ RESET:
 	if nodeTYPE == NodeIdentifier ||
 		nodeTYPE == NodeCallExpr ||
 		nodeTYPE == NodeField ||
-		nodeTYPE == NodeNullableField ||
 		nodeTYPE == NodeChain ||
-		nodeTYPE == NodeIndexExpr ||
-		nodeTYPE == NodeIndexNullableExpr {
+		nodeTYPE == NodeIndexExpr {
 		switch t.nextNonSpace().typ {
 		case itemLeftParen:
 			callExpr := t.newCallExpr(node.Position(), t.lex.lineNumber(), node)
@@ -831,54 +860,10 @@ RESET:
 			node = callExpr
 			goto RESET
 		case itemLeftBrackets:
-			base := node
-			var index Expression
-			var next item
-
-			// found colon is slice expression
-			if t.peekNonSpace().typ != itemColon {
-				index, next = t.parseExpression("index|slice expression")
-			} else {
-				next = t.nextNonSpace()
-			}
-
-			switch next.typ {
-			case itemColon:
-				var endIndex Expression
-				if t.peekNonSpace().typ != itemRightBrackets {
-					endIndex = t.expression("slice expression", "end indexß")
-				}
-				node = t.newSliceExpr(node.Position(), node.line(), base, index, endIndex)
-			case itemRightBrackets:
-				node = t.newIndexExpr(node.Position(), node.line(), base, index)
-				fallthrough
-			default:
-				t.backup()
-			}
-
-			t.expect(itemRightBrackets, "index expression", "closing bracket")
+			node = lefBracketHandler(node, false)
 			goto RESET
 		case itemLeftNullableBrackets:
-			base := node
-			var index Expression
-			var next item
-
-			// found colon is slice expression
-			if t.peekNonSpace().typ != itemColon {
-				index, next = t.parseExpression("index|slice expression")
-			} else {
-				next = t.nextNonSpace()
-			}
-
-			switch next.typ {
-			case itemRightBrackets:
-				node = t.newIndexNullableExpr(node.Position(), node.line(), base, index)
-				fallthrough
-			default:
-				t.backup()
-			}
-
-			t.expect(itemRightBrackets, "index expression", "closing bracket")
+			node = lefBracketHandler(node, true)
 			goto RESET
 		default:
 			t.backup()
@@ -1080,7 +1065,9 @@ func (t *Template) term() Node {
 	case itemNil:
 		return t.newNil(token.pos)
 	case itemField:
-		return t.newField(token.pos, token.val)
+		return t.newField(token.pos, token.val, false)
+	case itemNullableField:
+		return t.newField(token.pos, token.val, true)
 	case itemBool:
 		return t.newBool(token.pos, token.val == "true")
 	case itemCharConstant, itemComplex, itemNumber:

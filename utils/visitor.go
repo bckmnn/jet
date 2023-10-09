@@ -76,8 +76,6 @@ func (vc VisitorContext) Visit(node jet.Node) {
 		vc.visitTernaryExprNode(node)
 	case *jet.IndexExprNode:
 		vc.visitIndexExprNode(node)
-	case *jet.IndexNullableExprNode:
-		vc.visitIndexNullableExprNode(node)
 	case *jet.SliceExprNode:
 		vc.visitSliceExprNode(node)
 	case *jet.TextNode:
@@ -212,11 +210,6 @@ func (vc VisitorContext) visitTernaryExprNode(ternaryExprNode *jet.TernaryExprNo
 func (vc VisitorContext) visitIndexExprNode(indexNode *jet.IndexExprNode) {
 	vc.visitNode(indexNode.Base)
 	vc.visitNode(indexNode.Index)
-}
-
-func (vc VisitorContext) visitIndexNullableExprNode(indexNullableNode *jet.IndexNullableExprNode) {
-	vc.visitNode(indexNullableNode.Base)
-	vc.visitNode(indexNullableNode.Index)
 }
 
 func (vc VisitorContext) visitSliceExprNode(sliceExprNode *jet.SliceExprNode) {
