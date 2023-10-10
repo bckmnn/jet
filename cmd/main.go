@@ -15,6 +15,11 @@ var (
 		"user": reflect.ValueOf(User{
 			Name: "vlad",
 		}),
+		"m": reflect.ValueOf(map[string]interface{}{
+			"foo": map[string]interface{}{
+				"bar": "baz",
+			},
+		}),
 	}
 )
 
@@ -28,7 +33,14 @@ func main() {
 		panic(err)
 	}
 
-	if err = template.Execute(os.Stdout, variables, nil); err != nil {
+	if err = template.Execute(os.Stdout, variables, map[string]interface{}{
+		"Name": "vlad",
+		"Name2": map[string]interface{}{
+			"foo": map[string]interface{}{
+				"bar": "baz",
+			},
+		},
+	}); err != nil {
 		panic(err)
 	}
 }

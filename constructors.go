@@ -16,7 +16,6 @@ package jet
 
 import (
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 )
@@ -89,26 +88,21 @@ func (t *Template) newNil(pos Pos) *NilNode {
 	return &NilNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeNil, Pos: pos}}
 }
 
-func (t *Template) newField(pos Pos, ident string, nullable bool) *FieldNode {
-	log.Println("field ident", ident)
+func (t *Template) newField(pos Pos, ident string, lax bool) *FieldNode {
 	return &FieldNode{
 		NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeField, Pos: pos},
-		Idents: func(ident string, nullable bool) Idents {
-			idents := make(Idents, 0, strings.Count(ident, "."))
-			names := make([]string, 0, strings.Count(ident, "."))
-			if nullable {
-				names = strings.Split(ident[2:], "?.") // [2:] to drop leading period
-			} else {
-				names = strings.Split(ident[1:], ".") // [1:] to drop leading period
+		Idents: func(ident string, lax bool) Idents {
+			i, sep := 1, "."
+			if lax {
+				i, sep = 2, "?."
 			}
+			names := strings.Split(ident[i:], sep) // [i:] to drop leading period
+			idents := make(Idents, 0, strings.Count(ident, "."))
 			for _, name := range names {
-				idents = append(idents, Ident{
-					name:     name,
-					nullable: nullable,
-				})
+				idents = append(idents, Ident{name: name, lax: lax})
 			}
 			return idents
-		}(ident, nullable),
+		}(ident, lax),
 	}
 }
 

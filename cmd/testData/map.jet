@@ -1,2 +1,1 @@
-{{ m := map("foo", map("bar", "far")) }}
-{{ m.foo.bar }}
+{{ user?.Check() }}

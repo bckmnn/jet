@@ -52,19 +52,19 @@ const (
 	itemCharConstant                 // character constant
 	itemComplex                      // complex constant (1+2i); imaginary is just a number
 	itemEOF
-	itemField         // alphanumeric identifier starting with '.'
-	itemNullableField // alphanumeric identifier starting with '?.'
-	itemIdentifier    // alphanumeric identifier not starting with '.'
-	itemLeftDelim     // left action delimiter
-	itemLeftParen     // '(' inside action
-	itemNumber        // simple number, including imaginary
-	itemPipe          // pipe symbol
-	itemRawString     // raw quoted string (includes quotes)
-	itemRightDelim    // right action delimiter
-	itemRightParen    // ')' inside action
-	itemSpace         // run of spaces separating arguments
-	itemString        // quoted string (includes quotes)
-	itemText          // plain text
+	itemField      // alphanumeric identifier starting with '.'
+	itemLaxField   // alphanumeric identifier starting with '?.'
+	itemIdentifier // alphanumeric identifier not starting with '.'
+	itemLeftDelim  // left action delimiter
+	itemLeftParen  // '(' inside action
+	itemNumber     // simple number, including imaginary
+	itemPipe       // pipe symbol
+	itemRawString  // raw quoted string (includes quotes)
+	itemRightDelim // right action delimiter
+	itemRightParen // ')' inside action
+	itemSpace      // run of spaces separating arguments
+	itemString     // quoted string (includes quotes)
+	itemText       // plain text
 	itemAssign
 	itemEquals
 	itemNotEquals
@@ -82,7 +82,7 @@ const (
 	itemColon
 	itemTernary
 	itemLeftBrackets
-	itemLeftNullableBrackets
+	itemLeftLaxBrackets
 	itemRightBrackets
 	itemUnderscore
 	// Keywords appear after all the rest.
@@ -402,7 +402,6 @@ func lexInsideAction(l *lexer) stateFn {
 	case r == '%':
 		l.emit(itemMod)
 	case r == '-':
-
 		if r := l.peek(); '0' <= r && r <= '9' &&
 			itemAdd != l.lastType &&
 			itemMinus != l.lastType &&
@@ -439,13 +438,13 @@ func lexInsideAction(l *lexer) stateFn {
 	case r == '?':
 		switch l.next() {
 		case '[':
-			l.emit(itemLeftNullableBrackets)
+			l.emit(itemLeftLaxBrackets)
 		case '.':
 			// special look-ahead for ".field" so we don't break l.backup().
 			if l.pos < Pos(len(l.input)) {
 				r := l.input[l.pos]
 				if r < '0' || '9' < r {
-					return lexNullableField(l)
+					return lexLaxField
 				}
 			}
 		default:
@@ -479,7 +478,6 @@ func lexInsideAction(l *lexer) stateFn {
 			l.backup()
 			l.emit(itemNot)
 		}
-
 	case r == '=':
 		if l.next() == '=' {
 			l.emit(itemEquals)
@@ -620,9 +618,9 @@ func lexField(l *lexer) stateFn {
 	return lexInsideAction
 }
 
-// lexNullableField scans a field: ?.Alphanumeric.
+// lexLaxField scans a field: ?.Alphanumeric.
 // The ?. has been scanned.
-func lexNullableField(l *lexer) stateFn {
+func lexLaxField(l *lexer) stateFn {
 	if l.atTerminator() {
 		// Nothing interesting follows -> "." or "$".
 		l.emit(itemIdentifier)
@@ -640,7 +638,7 @@ func lexNullableField(l *lexer) stateFn {
 	if !l.atTerminator() {
 		return l.errorf("bad character %#U", r)
 	}
-	l.emit(itemNullableField)
+	l.emit(itemLaxField)
 	return lexInsideAction
 }
 

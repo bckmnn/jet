@@ -17,7 +17,6 @@ package jet
 import (
 	"bytes"
 	"fmt"
-	"log"
 	"path/filepath"
 )
 
@@ -247,8 +246,8 @@ type FieldNode struct {
 }
 
 type Ident struct {
-	name     string
-	nullable bool
+	name string
+	lax  bool
 }
 
 type Idents []Ident
@@ -264,7 +263,8 @@ func (i Idents) names() []string {
 func (f *FieldNode) String() string {
 	s := ""
 	for _, id := range f.Idents {
-		if id.nullable {
+
+		if id.lax {
 			s += "?."
 		} else {
 			s += "."
@@ -285,7 +285,6 @@ type ChainNode struct {
 
 // Add adds the named field (which should start with a period) to the end of the chain.
 func (c *ChainNode) Add(field string) {
-	log.Println("field", field)
 	var nullable bool
 	if len(field) == 0 || (field[0] != '.' && (field[0] != '?' && field[1] != '.')) {
 		panic("no dot in field")
@@ -303,8 +302,8 @@ func (c *ChainNode) Add(field string) {
 		panic("empty field")
 	}
 	c.Field = append(c.Field, Ident{
-		name:     field,
-		nullable: nullable,
+		name: field,
+		lax:  nullable,
 	})
 }
 
@@ -314,7 +313,7 @@ func (c *ChainNode) String() string {
 		s = "(" + s + ")"
 	}
 	for _, id := range c.Field {
-		if id.nullable {
+		if id.lax {
 			s += "?"
 		}
 		s += "." + id.name

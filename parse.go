@@ -827,9 +827,9 @@ func (t *Template) operand(context string) Expression {
 	}
 RESET:
 	peek := t.peek()
-	if peek.typ == itemField || peek.typ == itemNullableField {
+	if peek.typ == itemField || peek.typ == itemLaxField {
 		chain := t.newChain(t.peek().pos, node)
-		for t.peekNonSpace().typ == itemField {
+		for t.peekNonSpace().typ == itemField || t.peekNonSpace().typ == itemLaxField {
 			chain.Add(t.next().val)
 		}
 		// Compatibility with original API: If the term is of type NodeField
@@ -839,7 +839,7 @@ RESET:
 		// More complex error cases will have to be handled at execution time.
 		switch node.Type() {
 		case NodeField:
-			node = t.newField(chain.Position(), chain.String(), peek.typ == itemNullableField)
+			node = t.newField(chain.Position(), chain.String(), peek.typ == itemLaxField)
 		case NodeBool, NodeString, NodeNumber, NodeNil:
 			t.errorf("unexpected . after term %q", node.String())
 		default:
@@ -862,8 +862,11 @@ RESET:
 		case itemLeftBrackets:
 			node = lefBracketHandler(node, false)
 			goto RESET
-		case itemLeftNullableBrackets:
+		case itemLeftLaxBrackets:
 			node = lefBracketHandler(node, true)
+			goto RESET
+		case itemLaxField:
+			node = t.newField(node.Position(), node.String(), true)
 			goto RESET
 		default:
 			t.backup()
@@ -1066,7 +1069,7 @@ func (t *Template) term() Node {
 		return t.newNil(token.pos)
 	case itemField:
 		return t.newField(token.pos, token.val, false)
-	case itemNullableField:
+	case itemLaxField:
 		return t.newField(token.pos, token.val, true)
 	case itemBool:
 		return t.newBool(token.pos, token.val == "true")
