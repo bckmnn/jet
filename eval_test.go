@@ -432,6 +432,16 @@ func TestEvalIndexExpression(t *testing.T) {
 	RunJetTest(t, nil, &User{"José Santos", "email@example.com"}, "IndexExpressionStruct_2", `{{.["Email"]}}`, "email@example.com")
 }
 
+func TestEvalLaxIndexExpression(t *testing.T) {
+	RunJetTest(t, nil, []string{"111", "222"}, "LaxIndexExpressionSlice_1", `{{.?[2]}}`, "")
+
+	RunJetTest(t, nil, map[string]string{"name": "value"}, "LaxIndexExpressionMap_1", `{{.?["value"]}}`, "")
+	RunJetTest(t, nil, map[string]interface{}{"nested": map[string]string{"name": "value"}}, "LaxIndexExpressionMap_2", `{{.?["nested"]?.value}}`, "")
+	RunJetTest(t, nil, map[string]interface{}{"nested": map[string]string{"name": "value"}}, "LaxIndexExpressionMap_2", `{{.?["value"]?.name}}`, "")
+
+	RunJetTest(t, nil, &User{"José Santos", "email@example.com"}, "LaxIndexExpressionStruct_1", `{{.?["Phone"]}}`, "")
+}
+
 func TestEvalSliceExpression(t *testing.T) {
 	RunJetTest(t, nil, []string{"111", "222", "333", "444"}, "SliceExpressionSlice_1", `{{range .[1:]}}{{.}}{{end}}`, `222333444`)
 	RunJetTest(t, nil, []string{"111", "222", "333", "444"}, "SliceExpressionSlice_2", `{{range .[:2]}}{{.}}{{end}}`, `111222`)
@@ -1007,10 +1017,10 @@ func BenchmarkFieldAccess(b *testing.B) {
 	// benchmark len grows greater than about 100K, parsing performance is
 	// degraded and this benchmark takes a long time to setup.
 	//
-	// To test this, comment out the following line and run this specific
+	// To test this, comment out the following line and lex this specific
 	// benchmark with
-	//   go test -run Bench -bench BenchmarkFieldAcces -benchtime 0.02s
-	b.Skip("Can only run manually with -benchtime 0.02s")
+	//   go test -lex Bench -bench BenchmarkFieldAcces -benchtime 0.02s
+	b.Skip("Can only lex manually with -benchtime 0.02s")
 
 	const numFields = 3 // Must match the structure below.
 	tmplBuilder := new(strings.Builder)

@@ -223,9 +223,9 @@ func (s *Set) parse(name, text string, cacheAfterParsing bool) (t *Template, err
 	}
 	defer t.recover(&err)
 
-	lexer := lex(name, text, false)
+	lexer := newLexer(name, text, false)
 	lexer.setDelimiters(s.leftDelim, s.rightDelim)
-	lexer.run()
+	lexer.lex()
 	t.startParse(lexer)
 	t.parseTemplate(cacheAfterParsing)
 	t.stopParse()

@@ -37,14 +37,14 @@ func lexerTestCaseCustomLexer(t *testing.T, lexer *lexer, input string, items ..
 }
 
 func lexerTestCase(t *testing.T, input string, items ...itemType) {
-	lexer := lex("test.flowRender", input, true)
+	lexer := newLexer("test.flowRender", input, true)
 	lexerTestCaseCustomLexer(t, lexer, input, items...)
 }
 
 func lexerTestCaseCustomDelimiters(t *testing.T, leftDelim, rightDelim, input string, items ...itemType) {
-	lexer := lex("test.customDelimiters", input, false)
+	lexer := newLexer("test.customDelimiters", input, false)
 	lexer.setDelimiters(leftDelim, rightDelim)
-	lexer.run()
+	lexer.lex()
 	lexerTestCaseCustomLexer(t, lexer, input, items...)
 }
 
