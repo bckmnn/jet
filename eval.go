@@ -1227,7 +1227,8 @@ func (rt *Runtime) evalChainNodeExpression(node *ChainNode) (reflect.Value, erro
 	resolved := rt.evalPrimaryExpressionGroup(node.Node)
 
 	for i := 0; i < len(node.Field); i++ {
-		field, err := resolveIndex(resolved, reflect.Value{}, node.Field[i].name, node.Field[i].lax)
+		lax := node.Field[i].lax
+		field, err := resolveIndex(resolved, reflect.ValueOf(node.Field[i].name), node.Field[i].name, lax)
 		if err != nil {
 			return reflect.Value{}, err
 		}
@@ -1236,8 +1237,10 @@ func (rt *Runtime) evalChainNodeExpression(node *ChainNode) (reflect.Value, erro
 				// return reflect.Zero(resolved.Type().Elem()), nil
 				return reflect.Value{}, nil
 			}
-			return reflect.Value{}, nil
-			// fmt.Errorf("there is no field or method '%s' in %s (%s)", node.Field[i].name, getTypeString(resolved), node)
+			if !lax {
+				return reflect.Value{}, fmt.Errorf("there is no field or method '%s' in %s (%s)", node.Field[i].name, getTypeString(resolved), node)
+			}
+			field = reflect.ValueOf(nil)
 		}
 		resolved = field
 	}
@@ -1567,7 +1570,7 @@ func resolveIndex(v, index reflect.Value, indexAsStr string, lax bool) (reflect.
 		if lax {
 			return reflect.Value{}, nil
 		}
-		return reflect.Value{}, fmt.Errorf("there is no field or method '%s' in %s (%s)", index, v, getTypeString(v))
+		return reflect.Value{}, fmt.Errorf("there is no field or method '%s' in nil", indexAsStr)
 	}
 
 	v, isNil := indirect(v)
@@ -1628,7 +1631,7 @@ func resolveIndex(v, index reflect.Value, indexAsStr string, lax bool) (reflect.
 		return indirectEface(v.Index(x)), nil
 	case reflect.Struct:
 		if !indexIsStr {
-			return reflect.Value{}, fmt.Errorf("can't use %s (%s, not string) as field name in struct type %s", index, indexAsValue().Type(), v.Type())
+			return reflect.Value{}, fmt.Errorf("can't use '%s' (%s, not string) as field name in struct type %s", index, indexAsValue().Type(), v.Type())
 		}
 		typ := v.Type()
 		key := indexAsStr
@@ -1662,12 +1665,12 @@ func resolveIndex(v, index reflect.Value, indexAsStr string, lax bool) (reflect.
 		if lax {
 			return reflect.Value{}, nil
 		}
-		return reflect.Value{}, fmt.Errorf("can't use %s as field name in struct type %s", indexAsStr, v.Type())
+		return reflect.Value{}, fmt.Errorf("can't use '%s' as field name in struct type %s", indexAsStr, v.Type())
 	case reflect.Map:
 		// If it's a map, attempt to use the field name as a key.
 		indexVal := indexAsValue()
 		if !indexVal.Type().ConvertibleTo(v.Type().Key()) {
-			return reflect.Value{}, fmt.Errorf("can't use %s (%s) as key for map of type %s", indexAsStr, indexVal.Type(), v.Type())
+			return reflect.Value{}, fmt.Errorf("can't use '%s' (%s) as key for map of type %s", indexAsStr, indexVal.Type(), v.Type())
 		}
 		index = indexVal.Convert(v.Type().Key()) // noop in most cases, but not expensive
 		return indirectEface(v.MapIndex(indexVal)), nil

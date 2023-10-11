@@ -8,12 +8,20 @@ import (
 
 type User struct {
 	Name string
+	Info UserInfo
+}
+
+type UserInfo struct {
+	Age int
 }
 
 var (
 	variables = map[string]reflect.Value{
 		"user": reflect.ValueOf(User{
 			Name: "vlad",
+			Info: UserInfo{
+				Age: 20,
+			},
 		}),
 		"m": reflect.ValueOf(map[string]interface{}{
 			"foo": map[string]interface{}{
