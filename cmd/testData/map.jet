@@ -1,1 +1,1 @@
-{{ user?.Last }}
+{{ user["Name"] }}

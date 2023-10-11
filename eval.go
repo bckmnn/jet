@@ -274,19 +274,21 @@ func (rt *Runtime) executeSet(left Expression, right reflect.Value) {
 		}
 	}
 
-RESTART:
-	switch value.Kind() {
-	case reflect.Ptr:
-		value = value.Elem()
-		goto RESTART
-	case reflect.Struct:
-		value = value.FieldByName(fields[lef].name)
-		if !value.IsValid() {
-			left.errorf("identifier %q is not available in the current scope", fields[lef])
+	for {
+		switch value.Kind() {
+		case reflect.Ptr:
+			value = value.Elem()
+			continue
+		case reflect.Struct:
+			value = value.FieldByName(fields[lef].name)
+			if !value.IsValid() {
+				left.errorf("identifier %q is not available in the current scope", fields[lef])
+			}
+			value.Set(right)
+		case reflect.Map:
+			value.SetMapIndex(reflect.ValueOf(&fields[lef]).Elem(), right)
 		}
-		value.Set(right)
-	case reflect.Map:
-		value.SetMapIndex(reflect.ValueOf(&fields[lef]).Elem(), right)
+		break
 	}
 }
 
