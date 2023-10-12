@@ -106,7 +106,9 @@ func init() {
 				a.runtime.context = a.Get(1)
 			}
 
-			a.runtime.executeList(root)
+			if _, err = a.runtime.executeList(root); err != nil {
+				panic(err)
+			}
 
 			return hiddenTrue
 		})),
@@ -135,7 +137,10 @@ func init() {
 				defer func() { a.runtime.context = c }()
 				a.runtime.context = a.Get(1)
 			}
-			result = a.runtime.executeList(root)
+			result, err = a.runtime.executeList(root)
+			if err != nil {
+				panic(err)
+			}
 
 			return result
 		})),

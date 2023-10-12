@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/CloudyKit/jet/v6"
+	"log"
 	"os"
 	"reflect"
 )
@@ -38,7 +39,8 @@ func main() {
 
 	template, err := set.GetTemplate("map.jet")
 	if err != nil {
-		panic(err)
+		log.Println(err)
+		return
 	}
 
 	if err = template.Execute(os.Stdout, variables, map[string]interface{}{
@@ -49,6 +51,6 @@ func main() {
 			},
 		},
 	}); err != nil {
-		panic(err)
+		log.Println(err)
 	}
 }

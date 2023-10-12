@@ -17,7 +17,6 @@ package jet
 import (
 	"bytes"
 	"fmt"
-	"path/filepath"
 )
 
 var textFormat = "%s" // Changed to "%q" in tests for better error messages.
@@ -27,8 +26,8 @@ type Node interface {
 	String() string
 	Position() Pos
 	line() int
-	error(error)
-	errorf(string, ...interface{})
+	error(error) error
+	errorf(string, ...interface{}) error
 }
 
 type Expression interface {
@@ -57,12 +56,17 @@ func (node *NodeBase) line() int {
 	return node.Line
 }
 
-func (node *NodeBase) error(err error) {
-	node.errorf("%s", err)
+func (node *NodeBase) error(err error) error {
+	return node.errorf("%s", err)
 }
 
-func (node *NodeBase) errorf(format string, v ...interface{}) {
-	panic(fmt.Errorf("Jet Runtime Error (%q:%d): %s", filepath.ToSlash(node.TemplatePath), node.Line, fmt.Sprintf(format, v...)))
+func (node *NodeBase) errorf(format string, v ...interface{}) error {
+	return NewError(
+		RuntimeError,
+		fmt.Sprintf(format, v...),
+		Position{Line: node.Line, Column: 0},
+		map[string]interface{}{"template": node.TemplatePath},
+	)
 }
 
 // Type returns itself and provides an easy default implementation

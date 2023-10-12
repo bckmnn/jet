@@ -87,14 +87,46 @@ func TestParseTemplateAndImport(t *testing.T) {
 
 func TestUsefulErrorOnLateImportOrExtends(t *testing.T) {
 	p := ParserTestCase{T: t}
-	p.ExpectError("late_import.jet", `<html><head>{{import "./foo.jet"}}</head></html>`, "template: late_import.jet:1: parsing command: unexpected keyword 'import' ('import' statements must be at the beginning of the template)")
-	p.ExpectError("late_extends.jet", `<html><head>{{extends "./foo.jet"}}</head></html>`, "template: late_extends.jet:1: parsing command: unexpected keyword 'extends' ('extends' statements must be at the beginning of the template)")
+
+	templateName := "late_import.jet"
+	expectedError := NewError(
+		TemplateError,
+		"parsing command: unexpected keyword 'import' ('import' statements must be at the beginning of the template)",
+		Position{Line: 1, Column: 0},
+		map[string]interface{}{"template": templateName},
+	)
+	p.ExpectError(templateName, `<html><head>{{import "./foo.jet"}}</head></html>`, expectedError.Error())
+
+	templateName = "late_extends.jet"
+	expectedError = NewError(
+		TemplateError,
+		"parsing command: unexpected keyword 'extends' ('extends' statements must be at the beginning of the template)",
+		Position{Line: 1, Column: 0},
+		map[string]interface{}{"template": templateName},
+	)
+	p.ExpectError(templateName, `<html><head>{{extends "./foo.jet"}}</head></html>`, expectedError.Error())
 }
 
 func TestKeywordsDisallowedAsBlockNames(t *testing.T) {
 	p := ParserTestCase{T: t}
-	p.ExpectError("block_content.jet", `{{ block content() }}bla{{ end }}`, "template: block_content.jet:1: parsing block clause: unexpected keyword 'content' (expected name)")
-	p.ExpectError("block_if.jet", `{{ block if() }}bla{{ end }}`, "template: block_if.jet:1: parsing block clause: unexpected keyword 'if' (expected name)")
+
+	templateName := "block_content.jet"
+	expectedError := NewError(
+		TemplateError,
+		"parsing block clause: unexpected keyword 'content' (expected name)",
+		Position{Line: 1, Column: 0},
+		map[string]interface{}{"template": templateName},
+	)
+	p.ExpectError(templateName, `{{ block content() }}bla{{ end }}`, expectedError.Error())
+
+	templateName = "block_if.jet"
+	expectedError = NewError(
+		TemplateError,
+		"parsing block clause: unexpected keyword 'if' (expected name)",
+		Position{Line: 1, Column: 0},
+		map[string]interface{}{"template": templateName},
+	)
+	p.ExpectError(templateName, `{{ block if() }}bla{{ end }}`, expectedError.Error())
 }
 
 func TestParseTemplateControl(t *testing.T) {

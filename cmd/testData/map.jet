@@ -1,1 +1,2 @@
-{{ user.Info?.Age.a }}
+{{ user.Info.Age }}
+{{ user.Info.Age.a }}

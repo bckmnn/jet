@@ -33,7 +33,11 @@ func (a *Arguments) IsSet(argumentIndex int) bool {
 		if a.args.Exprs[argumentIndex].Type() == NodeUnderscore {
 			return a.pipedVal != nil
 		}
-		return a.runtime.isSet(a.args.Exprs[argumentIndex])
+		isSet, err := a.runtime.isSet(a.args.Exprs[argumentIndex])
+		if err != nil {
+			panic(err)
+		}
+		return isSet
 	}
 	if len(a.args.Exprs) == 0 && argumentIndex == 0 {
 		return a.pipedVal != nil
@@ -47,7 +51,11 @@ func (a *Arguments) Get(argumentIndex int) reflect.Value {
 		if a.args.Exprs[argumentIndex].Type() == NodeUnderscore {
 			return *a.pipedVal
 		}
-		return a.runtime.evalPrimaryExpressionGroup(a.args.Exprs[argumentIndex])
+		val, err := a.runtime.evalPrimaryExpressionGroup(a.args.Exprs[argumentIndex])
+		if err != nil {
+			panic(err)
+		}
+		return val
 	}
 	if len(a.args.Exprs) == 0 && argumentIndex == 0 {
 		return *a.pipedVal
