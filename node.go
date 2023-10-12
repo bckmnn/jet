@@ -26,8 +26,7 @@ type Node interface {
 	String() string
 	Position() Pos
 	line() int
-	error(error) error
-	errorf(string, ...interface{}) error
+	error(string, string) error
 }
 
 type Expression interface {
@@ -52,20 +51,19 @@ type NodeBase struct {
 	Pos
 }
 
-func (node *NodeBase) line() int {
-	return node.Line
+func (n *NodeBase) line() int {
+	return n.Line
 }
 
-func (node *NodeBase) error(err error) error {
-	return node.errorf("%s", err)
-}
-
-func (node *NodeBase) errorf(format string, v ...interface{}) error {
+func (n *NodeBase) error(reason, message string) error {
+	if reason == "" {
+		reason = RuntimeErrorReason
+	}
 	return NewError(
-		RuntimeError,
-		fmt.Sprintf(format, v...),
-		Position{Line: node.Line, Column: 0},
-		map[string]interface{}{"template": node.TemplatePath},
+		reason,
+		n.TemplatePath,
+		message,
+		&Position{Line: n.Line, Column: 0},
 	)
 }
 

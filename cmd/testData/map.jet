@@ -1,2 +1,2 @@
-{{ user.Info.Age }}
-{{ user.Info.Age.a }}
+{{ s := slice(1, 2, 3) }}
+{{ s[4] }}

@@ -90,19 +90,19 @@ func TestUsefulErrorOnLateImportOrExtends(t *testing.T) {
 
 	templateName := "late_import.jet"
 	expectedError := NewError(
-		TemplateError,
+		UnexpectedKeywordReason,
+		templateName,
 		"parsing command: unexpected keyword 'import' ('import' statements must be at the beginning of the template)",
-		Position{Line: 1, Column: 0},
-		map[string]interface{}{"template": templateName},
+		&Position{Line: 1, Column: 0},
 	)
 	p.ExpectError(templateName, `<html><head>{{import "./foo.jet"}}</head></html>`, expectedError.Error())
 
 	templateName = "late_extends.jet"
 	expectedError = NewError(
-		TemplateError,
+		UnexpectedKeywordReason,
+		templateName,
 		"parsing command: unexpected keyword 'extends' ('extends' statements must be at the beginning of the template)",
-		Position{Line: 1, Column: 0},
-		map[string]interface{}{"template": templateName},
+		&Position{Line: 1, Column: 0},
 	)
 	p.ExpectError(templateName, `<html><head>{{extends "./foo.jet"}}</head></html>`, expectedError.Error())
 }
@@ -112,19 +112,19 @@ func TestKeywordsDisallowedAsBlockNames(t *testing.T) {
 
 	templateName := "block_content.jet"
 	expectedError := NewError(
-		TemplateError,
+		UnexpectedKeywordReason,
+		templateName,
 		"parsing block clause: unexpected keyword 'content' (expected name)",
-		Position{Line: 1, Column: 0},
-		map[string]interface{}{"template": templateName},
+		&Position{Line: 1, Column: 0},
 	)
 	p.ExpectError(templateName, `{{ block content() }}bla{{ end }}`, expectedError.Error())
 
 	templateName = "block_if.jet"
 	expectedError = NewError(
-		TemplateError,
+		UnexpectedKeywordReason,
+		templateName,
 		"parsing block clause: unexpected keyword 'if' (expected name)",
-		Position{Line: 1, Column: 0},
-		map[string]interface{}{"template": templateName},
+		&Position{Line: 1, Column: 0},
 	)
 	p.ExpectError(templateName, `{{ block if() }}bla{{ end }}`, expectedError.Error())
 }

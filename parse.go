@@ -151,19 +151,17 @@ func (t *Template) peekNonSpace() (token item) {
 }
 
 // errorf formats the error and terminates processing.
-func (t *Template) errorf(format string, args ...interface{}) error {
+func (t *Template) error(reason, message string) error {
 	t.Root = nil
+	if reason == "" {
+		reason = TemplateErrorReason
+	}
 	return NewError(
-		TemplateError,
-		fmt.Sprintf(format, args...),
-		Position{Line: t.lex.lineNumber(), Column: 0},
-		map[string]interface{}{"template": t.ParseName},
+		reason,
+		t.ParseName,
+		message,
+		&Position{Line: t.lex.lineNumber(), Column: 0},
 	)
-}
-
-// error terminates processing.
-func (t *Template) error(err error) error {
-	return t.errorf("%s", err)
 }
 
 // expect consumes the next token and guarantees it has the required type.
@@ -206,11 +204,11 @@ func (t *Template) unexpected(token item, context, expected string) error {
 	switch {
 	case token.typ == itemImport,
 		token.typ == itemExtends:
-		return t.errorf("parsing %s: unexpected keyword '%s' ('%s' statements must be at the beginning of the template)", context, token.val, token.val)
+		return t.error(UnexpectedKeywordReason, fmt.Sprintf("parsing %s: unexpected keyword '%s' ('%s' statements must be at the beginning of the template)", context, token.val, token.val))
 	case token.typ > itemKeyword:
-		return t.errorf("parsing %s: unexpected keyword '%s' (expected %s)", context, token.val, expected)
+		return t.error(UnexpectedKeywordReason, fmt.Sprintf("parsing %s: unexpected keyword '%s' (expected %s)", context, token.val, expected))
 	default:
-		return t.errorf("parsing %s: unexpected token '%s' (expected %s)", context, token.val, expected)
+		return t.error(UnexpectedTokenReason, fmt.Sprintf("parsing %s: unexpected token '%s' (expected %s)", context, token.val, expected))
 	}
 }
 
@@ -268,7 +266,7 @@ func (t *Template) expectString(context string) (string, error) {
 	}
 	s, err := unquote(token.val)
 	if err != nil {
-		return "", t.error(err)
+		return "", t.error("", err.Error())
 	}
 	return s, nil
 }
@@ -292,19 +290,19 @@ func (t *Template) parseTemplate(cacheAfterParsing bool) (next Node, err error) 
 				}
 				if token.typ == itemExtends {
 					if t.extends != nil {
-						return nil, t.errorf("Unexpected extends clause: each template can only extend one template")
+						return nil, t.error(UnexpectedClause, "Unexpected extends clause: each template can only extend one template")
 					} else if len(t.imports) > 0 {
-						return nil, t.errorf("Unexpected extends clause: the 'extends' clause should come before all import clauses")
+						return nil, t.error(UnexpectedClause, "Unexpected extends clause: the 'extends' clause should come before all import clauses")
 					}
 					var err error
 					t.extends, err = t.set.getSiblingTemplate(s, t.Name, cacheAfterParsing)
 					if err != nil {
-						return nil, t.error(err)
+						return nil, t.error("", err.Error())
 					}
 				} else {
 					tt, err := t.set.getSiblingTemplate(s, t.Name, cacheAfterParsing)
 					if err != nil {
-						return nil, t.error(err)
+						return nil, t.error("", err.Error())
 					}
 					t.imports = append(t.imports, tt)
 				}
@@ -328,7 +326,7 @@ func (t *Template) parseTemplate(cacheAfterParsing bool) (next Node, err error) 
 		}
 		switch n.Type() {
 		case nodeEnd, nodeElse, nodeContent:
-			return nil, t.errorf("unexpected %s", n)
+			return nil, t.error(Unexpected, fmt.Sprintf("unexpected %s", n))
 		default:
 			t.Root.append(n)
 		}
@@ -597,7 +595,7 @@ func (t *Template) itemList(terminatedBy ...NodeType) (list *ListNode, next Node
 		list.append(n)
 	}
 
-	return list, next, t.errorf("unexpected EOF")
+	return list, next, t.error(Unexpected, "unexpected EOF")
 }
 
 // textOrAction:
@@ -828,9 +826,7 @@ func (t *Template) assignmentOrExpression(context string) (operand Expression, e
 			case NodeField, NodeChain, NodeIdentifier, NodeUnderscore:
 				left = append(left, operand)
 			default:
-				if err = t.errorf("unexpected node in assign"); err != nil {
-					return nil, err
-				}
+				return nil, t.error(UnexpectedNodeReason, "unexpected node in assign")
 			}
 
 			switch returned.typ {
@@ -852,7 +848,7 @@ func (t *Template) assignmentOrExpression(context string) (operand Expression, e
 		if isLet {
 			for _, operand := range left {
 				if operand.Type() != NodeIdentifier && operand.Type() != NodeUnderscore {
-					if err = t.errorf("unexpected node type %s in variable declaration", operand); err != nil {
+					if err = t.error(UnexpectedNodeTypeReason, fmt.Sprintf("unexpected node type %s in variable declaration", operand)); err != nil {
 						return nil, err
 					}
 				}
@@ -875,7 +871,7 @@ func (t *Template) assignmentOrExpression(context string) (operand Expression, e
 
 		if context == "range" {
 			if len(left) > 2 || len(right) > 1 {
-				if err = t.errorf("unexpected number of operands in assign on range"); err != nil {
+				if err = t.error("unexpected.number_of_operands", "unexpected number of operands in assign on range"); err != nil {
 					return nil, err
 				}
 			}
@@ -884,7 +880,7 @@ func (t *Template) assignmentOrExpression(context string) (operand Expression, e
 				if len(left) == 2 && len(right) == 1 && right[0].Type() == NodeIndexExpr {
 					isIndexExprGetLookup = true
 				} else {
-					if err = t.errorf("unexpected number of operands in assign on range"); err != nil {
+					if err = t.error("unexpected.number_of_operands", "unexpected number of operands in assign on range"); err != nil {
 						return nil, err
 					}
 				}
@@ -916,7 +912,7 @@ func (t *Template) pipeline(context string, baseExprMutate Expression) (pipe *Pi
 	pipe = t.newPipeline(pos, t.lex.lineNumber())
 
 	if baseExprMutate == nil {
-		if err = pipe.errorf("parsing pipeline: first expression cannot be nil"); err != nil {
+		if err = pipe.error("invalid.expression", "parsing pipeline: first expression cannot be nil"); err != nil {
 			return nil, err
 		}
 	}
@@ -985,7 +981,7 @@ func (t *Template) command(baseExpr Expression) (*CommandNode, error) {
 	}
 
 	if cmd.BaseExpr == nil {
-		if err = t.errorf("empty command"); err != nil {
+		if err = t.error("empty.command", "empty command"); err != nil {
 			return nil, err
 		}
 	}
@@ -1065,7 +1061,7 @@ func (t *Template) operand(context string) (Expression, error) {
 			case NodeField:
 				node = t.newField(chain.Position(), chain.String(), peek.typ == itemLaxField)
 			case NodeBool, NodeString, NodeNumber, NodeNil:
-				if err = t.errorf("unexpected . after term %q", node.String()); err != nil {
+				if err = t.error(Unexpected, fmt.Sprintf("unexpected . after term %q", node.String())); err != nil {
 					return nil, err
 				}
 			default:
@@ -1134,7 +1130,7 @@ loop:
 		if expr.Type() == NodeUnderscore {
 			// slot for piped argument
 			if args.HasPipeSlot {
-				if err = t.errorf("found two pipe slot markers ('_') for the same function call"); err != nil {
+				if err = t.error("conflict", "found two pipe slot markers ('_') for the same function call"); err != nil {
 					return CallArgs{}, err
 				}
 			}
@@ -1330,7 +1326,7 @@ func (t *Template) parseCatch() (*catchNode, error) {
 			return nil, err
 		}
 		if typ := _errVar.Type(); typ != NodeIdentifier {
-			return nil, t.errorf("unexpected node type '%v' in catch", typ)
+			return nil, t.error(UnexpectedNodeTypeReason, fmt.Sprintf("unexpected node type '%v' in catch", typ))
 		}
 		errVar = _errVar.(*IdentifierNode)
 	}
@@ -1361,7 +1357,7 @@ func (t *Template) parseCatch() (*catchNode, error) {
 func (t *Template) term() (Node, error) {
 	switch token := t.nextNonSpace(); token.typ {
 	case itemError:
-		return nil, t.errorf("%s", token.val)
+		return nil, t.error("item.error", fmt.Sprintf("%s", token.val))
 	case itemIdentifier:
 		return t.newIdentifier(token.val, token.pos, t.lex.lineNumber()), nil
 	case itemUnderscore:
@@ -1377,7 +1373,7 @@ func (t *Template) term() (Node, error) {
 	case itemCharConstant, itemComplex, itemNumber:
 		number, err := t.newNumber(token.pos, token.val, token.typ)
 		if err != nil {
-			return nil, t.error(err)
+			return nil, t.error("", err.Error())
 		}
 		return number, nil
 	case itemLeftParen:
@@ -1392,7 +1388,7 @@ func (t *Template) term() (Node, error) {
 	case itemString, itemRawString:
 		s, err := unquote(token.val)
 		if err != nil {
-			return nil, t.error(err)
+			return nil, t.error("", err.Error())
 		}
 		return t.newString(token.pos, token.val, s), nil
 	}
