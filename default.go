@@ -16,8 +16,8 @@ package jet
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
+	"github.com/CloudyKit/jet/v6/utils/e"
 	"html"
 	"io"
 	"io/ioutil"
@@ -64,7 +64,7 @@ func init() {
 
 			expression := a.Get(0)
 			if !expression.IsValid() {
-				a.Panicf("len(): argument is not a valid value")
+				a.Panicf(e.InvalidValueErr.WithMessage("len(): argument is not a valid value").Error())
 			}
 			if expression.Kind() == reflect.Ptr || expression.Kind() == reflect.Interface {
 				expression = expression.Elem()
@@ -77,7 +77,7 @@ func init() {
 				return reflect.ValueOf(expression.NumField())
 			}
 
-			a.Panicf("len(): invalid value type %s", expression.Type())
+			a.Panicf(e.InvalidValueErr.WithMessage(fmt.Sprintf("len(): invalid value type %s", expression.Type())).Error())
 			return reflect.Value{}
 		})),
 		"includeIfExists": reflect.ValueOf(Func(func(a Arguments) reflect.Value {
@@ -85,7 +85,9 @@ func init() {
 			t, err := a.runtime.set.GetTemplate(a.Get(0).String())
 			// If template exists but returns an error then panic instead of failing silently
 			if t != nil && err != nil {
-				panic(fmt.Errorf("including %s: %w", a.Get(0).String(), err))
+				a.Panicf(e.New().WithReason("invalid.includeIfExists").
+					WithMessage(fmt.Errorf("including %s: %w", a.Get(0).String(), err).Error()).Error(),
+				)
 			}
 			if err != nil {
 				return hiddenFalse
@@ -107,7 +109,7 @@ func init() {
 			}
 
 			if _, err = a.runtime.executeList(root); err != nil {
-				panic(err)
+				a.Panicf(err.Error())
 			}
 
 			return hiddenTrue
@@ -116,7 +118,9 @@ func init() {
 			a.RequireNumOfArguments("exec", 1, 2)
 			t, err := a.runtime.set.GetTemplate(a.Get(0).String())
 			if err != nil {
-				panic(fmt.Errorf("exec(%s, %v): %w", a.Get(0), a.Get(1), err))
+				a.Panicf(e.New().WithReason("invalid.exec").
+					WithMessage(fmt.Errorf("exec(%s, %v): %w", a.Get(0), a.Get(1), err).Error()).Error(),
+				)
 			}
 
 			a.runtime.newScope()
@@ -139,20 +143,21 @@ func init() {
 			}
 			result, err = a.runtime.executeList(root)
 			if err != nil {
-				panic(err)
+				a.Panicf(err.Error())
 			}
 
 			return result
 		})),
 		"ints": reflect.ValueOf(Func(func(a Arguments) (result reflect.Value) {
 			var from, to int64
-			err := a.ParseInto(&from, &to)
-			if err != nil {
+			if err := a.ParseInto(&from, &to); err != nil {
 				panic(err)
 			}
 			// check to > from
 			if to <= from {
-				panic(errors.New("invalid range for ints ranger: 'from' must be smaller than 'to'"))
+				panic(e.New().WithReason("invalid.range").
+					WithMessage("invalid range for ints ranger: 'from' must be smaller than 'to'"),
+				)
 			}
 			return reflect.ValueOf(newIntsRanger(from, to))
 		})),
@@ -173,7 +178,9 @@ func init() {
 				for i := range ids {
 					arg := a.Get(i)
 					if arg.Kind() != reflect.String {
-						panic(fmt.Errorf("dump: expected argument %d to be a string, but got a %T", i, arg.Interface()))
+						a.Panicf(e.New().WithReason("unexpected.argument").
+							WithMessage(fmt.Sprintf("dump: expected argument %d to be a string, but got a %T", i, arg.Interface())).Error(),
+						)
 					}
 					ids = append(ids, arg.String())
 				}
@@ -213,7 +220,9 @@ var stringType = reflect.TypeOf("")
 
 var newMap = Func(func(a Arguments) reflect.Value {
 	if a.NumOfArguments()%2 > 0 {
-		panic("map(): incomplete key-value pair (even number of arguments required)")
+		a.Panicf(e.New().WithReason("incomplete.map").
+			WithMessage("map(): incomplete key-value pair (even number of arguments required)").Error(),
+		)
 	}
 
 	m := reflect.ValueOf(make(map[string]interface{}, a.NumOfArguments()/2))
@@ -221,10 +230,14 @@ var newMap = Func(func(a Arguments) reflect.Value {
 	for i := 0; i < a.NumOfArguments(); i += 2 {
 		key := a.Get(i)
 		if !key.IsValid() {
-			a.Panicf("map(): key argument at position %d is not a valid value!", i)
+			a.Panicf(e.InvalidValueErr.
+				WithMessage(fmt.Sprintf("map(): key argument at position %d is not a valid value!", i)).Error(),
+			)
 		}
 		if !key.Type().ConvertibleTo(stringType) {
-			a.Panicf("map(): can't use %+v as string key: %s is not convertible to string", key, key.Type())
+			a.Panicf(e.InvalidValueErr.
+				WithMessage(fmt.Sprintf("map(): can't use %+v as string key: %s is not convertible to string", key, key.Type())).Error(),
+			)
 		}
 		key = key.Convert(stringType)
 		m.SetMapIndex(a.Get(i), a.Get(i+1))

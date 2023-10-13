@@ -16,6 +16,7 @@ package jet
 
 import (
 	"bytes"
+	"github.com/CloudyKit/jet/v6/utils/e"
 	"io/ioutil"
 	"path"
 	"strings"
@@ -89,20 +90,20 @@ func TestUsefulErrorOnLateImportOrExtends(t *testing.T) {
 	p := ParserTestCase{T: t}
 
 	templateName := "late_import.jet"
-	expectedError := NewError(
-		UnexpectedKeywordReason,
+	expectedError := e.Build(
+		e.UnexpectedKeywordReason,
 		templateName,
 		"parsing command: unexpected keyword 'import' ('import' statements must be at the beginning of the template)",
-		&Position{Line: 1, Column: 0},
+		&e.Position{L: 1, C: 0},
 	)
 	p.ExpectError(templateName, `<html><head>{{import "./foo.jet"}}</head></html>`, expectedError.Error())
 
 	templateName = "late_extends.jet"
-	expectedError = NewError(
-		UnexpectedKeywordReason,
+	expectedError = e.Build(
+		e.UnexpectedKeywordReason,
 		templateName,
 		"parsing command: unexpected keyword 'extends' ('extends' statements must be at the beginning of the template)",
-		&Position{Line: 1, Column: 0},
+		&e.Position{L: 1, C: 0},
 	)
 	p.ExpectError(templateName, `<html><head>{{extends "./foo.jet"}}</head></html>`, expectedError.Error())
 }
@@ -111,20 +112,20 @@ func TestKeywordsDisallowedAsBlockNames(t *testing.T) {
 	p := ParserTestCase{T: t}
 
 	templateName := "block_content.jet"
-	expectedError := NewError(
-		UnexpectedKeywordReason,
+	expectedError := e.Build(
+		e.UnexpectedKeywordReason,
 		templateName,
 		"parsing block clause: unexpected keyword 'content' (expected name)",
-		&Position{Line: 1, Column: 0},
+		&e.Position{L: 1, C: 0},
 	)
 	p.ExpectError(templateName, `{{ block content() }}bla{{ end }}`, expectedError.Error())
 
 	templateName = "block_if.jet"
-	expectedError = NewError(
-		UnexpectedKeywordReason,
+	expectedError = e.Build(
+		e.UnexpectedKeywordReason,
 		templateName,
 		"parsing block clause: unexpected keyword 'if' (expected name)",
-		&Position{Line: 1, Column: 0},
+		&e.Position{L: 1, C: 0},
 	)
 	p.ExpectError(templateName, `{{ block if() }}bla{{ end }}`, expectedError.Error())
 }

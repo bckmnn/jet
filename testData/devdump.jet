@@ -56,7 +56,7 @@ Blocks:
 	block mainMenu(type="text",label="main"), from /devdump.jet
 
 ------------------------------------- dump with erroneous use
-dump: expected argument 0 to be a string, but got a float64
+unexpected.argument dump: expected argument 0 to be a string, but got a float64
 ------------------------------------- dump named
 	mainMenu:="a variable, not a block!" // string
 	block mainMenu(type="text",label="main"), from /devdump.jet

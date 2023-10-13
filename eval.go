@@ -16,8 +16,8 @@ package jet
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
+	"github.com/CloudyKit/jet/v6/utils/e"
 	"io"
 	"reflect"
 	"runtime"
@@ -75,7 +75,7 @@ func (w *escapeeWriter) Write(b []byte) (int, error) {
 type Runtime struct {
 	*escapeeWriter
 	*scope
-	content func(*Runtime, Expression) error
+	content func(*Runtime, Expression) e.Error
 
 	context reflect.Value
 }
@@ -109,11 +109,11 @@ func (s *scope) sortedBlocks() []string {
 }
 
 // YieldBlock yields a block in the current context, will panic if the context is not available
-func (rt *Runtime) YieldBlock(name string, context interface{}) error {
+func (rt *Runtime) YieldBlock(name string, context interface{}) e.Error {
 	block, has := rt.getBlock(name)
 
 	if has == false {
-		return errBuilder().
+		return e.New().
 			WithReason("not_found.block").
 			WithMessage(fmt.Sprintf("block %q was not found!!", name))
 	}
@@ -140,7 +140,7 @@ func (s *scope) getBlock(name string) (block *BlockNode, has bool) {
 	return
 }
 
-func (rt *Runtime) setValue(name string, val reflect.Value) error {
+func (rt *Runtime) setValue(name string, val reflect.Value) e.Error {
 	// try changing existing variable in current or parent scope
 	sc := rt.scope
 	for sc != nil {
@@ -151,7 +151,7 @@ func (rt *Runtime) setValue(name string, val reflect.Value) error {
 		sc = sc.parent
 	}
 
-	return errBuilder().
+	return e.New().
 		WithReason("invalid.variable").
 		WithMessage(fmt.Sprintf("could not assign %q = %v because variable %q is uninitialised", name, val, name))
 }
@@ -189,7 +189,7 @@ func (rt *Runtime) SetOrLet(name string, val interface{}) {
 }
 
 // Resolve resolves a value from the execution context.
-func (rt *Runtime) resolve(name string) (reflect.Value, error) {
+func (rt *Runtime) resolve(name string) (reflect.Value, e.Error) {
 	if name == "." {
 		return rt.context, nil
 	}
@@ -218,7 +218,7 @@ func (rt *Runtime) resolve(name string) (reflect.Value, error) {
 		return indirectEface(v), nil
 	}
 
-	return reflect.Value{}, errBuilder().
+	return reflect.Value{}, e.New().
 		WithReason("not_available.identifier").
 		WithMessage(fmt.Sprintf("identifier %q not available in current (%+v) or parent scope, global, or default variables", name, rt.scope.variables))
 }
@@ -255,16 +255,13 @@ func (rt *Runtime) recover(err *error) {
 	}
 }
 
-func (rt *Runtime) executeSet(left Expression, right reflect.Value) error {
+func (rt *Runtime) executeSet(left Expression, right reflect.Value) e.Error {
 	typ := left.Type()
 	if typ == NodeIdentifier {
-		if err := rt.setValue(left.(*IdentifierNode).Ident, right); err != nil {
-			return left.error("", err.Error())
-		}
-		return nil
+		return rt.setValue(left.(*IdentifierNode).Ident, right)
 	}
 	var value reflect.Value
-	var err error
+	var err e.Error
 	var fields Idents
 	if typ == NodeChain {
 		chain := left.(*ChainNode)
@@ -281,7 +278,7 @@ func (rt *Runtime) executeSet(left Expression, right reflect.Value) error {
 	for i := 0; i < lef; i++ {
 		value, err = resolveIndex(value, reflect.Value{}, fields[i].name, fields[i].lax)
 		if err != nil {
-			return left.error("", err.Error())
+			return left.error(err.Reason(), err.Message())
 		}
 	}
 
@@ -308,7 +305,7 @@ func (rt *Runtime) executeSet(left Expression, right reflect.Value) error {
 	return nil
 }
 
-func (rt *Runtime) executeSetList(set *SetNode) error {
+func (rt *Runtime) executeSetList(set *SetNode) e.Error {
 	if set.IndexExprGetLookup {
 		value, err := rt.evalPrimaryExpressionGroup(set.Right[0])
 		if err != nil {
@@ -347,7 +344,7 @@ func (rt *Runtime) executeSetList(set *SetNode) error {
 	return nil
 }
 
-func (rt *Runtime) executeLetList(set *SetNode) error {
+func (rt *Runtime) executeLetList(set *SetNode) e.Error {
 	if set.IndexExprGetLookup {
 		value, err := rt.evalPrimaryExpressionGroup(set.Right[0])
 		if err != nil {
@@ -378,7 +375,7 @@ func (rt *Runtime) executeLetList(set *SetNode) error {
 	return nil
 }
 
-func (rt *Runtime) executeYieldBlock(block *BlockNode, blockParam, yieldParam *BlockParameterList, expression Expression, content *ListNode) error {
+func (rt *Runtime) executeYieldBlock(block *BlockNode, blockParam, yieldParam *BlockParameterList, expression Expression, content *ListNode) e.Error {
 	needNewScope := len(blockParam.List) > 0 || len(yieldParam.List) > 0
 	if needNewScope {
 		rt.newScope()
@@ -417,7 +414,7 @@ func (rt *Runtime) executeYieldBlock(block *BlockNode, blockParam, yieldParam *B
 	mycontent := rt.content
 	if content != nil {
 		myscope := rt.scope
-		rt.content = func(st *Runtime, expression Expression) error {
+		rt.content = func(st *Runtime, expression Expression) e.Error {
 			outscope := st.scope
 			outcontent := st.content
 
@@ -474,7 +471,7 @@ func (rt *Runtime) executeYieldBlock(block *BlockNode, blockParam, yieldParam *B
 	return nil
 }
 
-func (rt *Runtime) executeList(list *ListNode) (returnValue reflect.Value, err error) {
+func (rt *Runtime) executeList(list *ListNode) (returnValue reflect.Value, err e.Error) {
 	inNewScope := false // to use just one scope for multiple actions with variable declarations
 
 	for i := 0; i < len(list.Nodes); i++ {
@@ -483,7 +480,7 @@ func (rt *Runtime) executeList(list *ListNode) (returnValue reflect.Value, err e
 		switch node.Type() {
 		case NodeText:
 			node := node.(*TextNode)
-			if _, err = rt.Writer.Write(node.Text); err != nil {
+			if _, err := rt.Writer.Write(node.Text); err != nil {
 				return reflect.Value{}, node.error("", err.Error())
 			}
 		case NodeAction:
@@ -509,7 +506,7 @@ func (rt *Runtime) executeList(list *ListNode) (returnValue reflect.Value, err e
 					if v.Type().Implements(rendererType) {
 						v.Interface().(Renderer).Render(rt)
 					} else {
-						if _, err = fastprinter.PrintValue(rt.escapeeWriter, v); err != nil {
+						if _, err := fastprinter.PrintValue(rt.escapeeWriter, v); err != nil {
 							return reflect.Value{}, node.error("", err.Error())
 						}
 					}
@@ -651,7 +648,7 @@ func (rt *Runtime) executeList(list *ListNode) (returnValue reflect.Value, err e
 	return returnValue, err
 }
 
-func (rt *Runtime) executeTry(try *TryNode) (returnValue reflect.Value, err error) {
+func (rt *Runtime) executeTry(try *TryNode) (returnValue reflect.Value, err e.Error) {
 	writer := rt.Writer
 	buf := new(bytes.Buffer)
 
@@ -684,26 +681,26 @@ func (rt *Runtime) executeTry(try *TryNode) (returnValue reflect.Value, err erro
 	return rt.executeList(try.List)
 }
 
-func (rt *Runtime) executeInclude(node *IncludeNode) (returnValue reflect.Value, err error) {
+func (rt *Runtime) executeInclude(node *IncludeNode) (returnValue reflect.Value, err e.Error) {
 	var templatePath string
 	name, err := rt.evalPrimaryExpressionGroup(node.Name)
 	if err != nil {
 		return reflect.Value{}, err
 	}
 	if !name.IsValid() {
-		return reflect.Value{}, node.error("invalid.name", "evaluating name of template to include: name is not a valid value")
+		return reflect.Value{}, node.error(e.InvalidValueReason, "evaluating name of template to include: name is not a valid value")
 	}
 	if name.Type().Implements(stringerType) {
 		templatePath = name.String()
 	} else if name.Kind() == reflect.String {
 		templatePath = name.String()
 	} else {
-		return reflect.Value{}, node.error(UnexpectedExpressionType, fmt.Sprintf("evaluating name of template to include: unexpected expression type %q", getTypeString(name)))
+		return reflect.Value{}, node.error(e.UnexpectedExpressionTypeReason, fmt.Sprintf("evaluating name of template to include: unexpected expression type %q", getTypeString(name)))
 	}
 
-	t, err := rt.set.getSiblingTemplate(templatePath, node.TemplatePath, true)
+	t, getTemplateErr := rt.set.getSiblingTemplate(templatePath, node.TemplatePath, true)
 	if err != nil {
-		return reflect.Value{}, node.error("", err.Error())
+		return reflect.Value{}, node.error("", getTemplateErr.Error())
 	}
 
 	rt.newScope()
@@ -736,7 +733,7 @@ var (
 	valueBoolFALSE = reflect.ValueOf(false)
 )
 
-func (rt *Runtime) evalPrimaryExpressionGroup(node Expression) (reflect.Value, error) {
+func (rt *Runtime) evalPrimaryExpressionGroup(node Expression) (reflect.Value, e.Error) {
 	switch node.Type() {
 	case NodeAdditiveExpr:
 		return rt.evalAdditiveExpression(node.(*AdditiveExprNode))
@@ -771,7 +768,7 @@ func (rt *Runtime) evalPrimaryExpressionGroup(node Expression) (reflect.Value, e
 			return reflect.Value{}, err
 		}
 		if baseExpr.Kind() != reflect.Func {
-			return reflect.Value{}, node.error("", fmt.Sprintf("node %q is not func kind %q", node.BaseExpr, baseExpr.Type()))
+			return reflect.Value{}, node.error("invalid.node", fmt.Sprintf("node %q is not func kind %q", node.BaseExpr, baseExpr.Type()))
 		}
 		ret, err := rt.evalCallExpression(baseExpr, node.CallArgs)
 		if err != nil {
@@ -791,7 +788,7 @@ func (rt *Runtime) evalPrimaryExpressionGroup(node Expression) (reflect.Value, e
 
 		resolved, err := resolveIndex(base, index, "", node.Nullable)
 		if err != nil {
-			return reflect.Value{}, node.error("", err.Error())
+			return reflect.Value{}, node.error(err.Reason(), err.Message())
 		}
 		return resolved, nil
 	case NodeSliceExpr:
@@ -810,7 +807,7 @@ func (rt *Runtime) evalPrimaryExpressionGroup(node Expression) (reflect.Value, e
 			if canNumber(indexExpression.Kind()) {
 				index = int(castInt64(indexExpression))
 			} else {
-				return reflect.Value{}, node.Index.error(InvalidValueReason, fmt.Sprintf("non numeric value in index expression kind %s", indexExpression.Kind().String()))
+				return reflect.Value{}, node.Index.error(e.InvalidValueReason, fmt.Sprintf("non numeric value in index expression kind %s", indexExpression.Kind().String()))
 			}
 		}
 
@@ -822,7 +819,7 @@ func (rt *Runtime) evalPrimaryExpressionGroup(node Expression) (reflect.Value, e
 			if canNumber(indexExpression.Kind()) {
 				length = int(castInt64(indexExpression))
 			} else {
-				return reflect.Value{}, node.EndIndex.error(InvalidValueReason, fmt.Sprintf("non numeric value in index expression kind %s", indexExpression.Kind().String()))
+				return reflect.Value{}, node.EndIndex.error(e.InvalidValueReason, fmt.Sprintf("non numeric value in index expression kind %s", indexExpression.Kind().String()))
 			}
 		} else {
 			length = baseExpression.Len()
@@ -847,7 +844,7 @@ func notNil(v reflect.Value) bool {
 	}
 }
 
-func (rt *Runtime) isSet(node Node) (ok bool, err error) {
+func (rt *Runtime) isSet(node Node) (ok bool, err e.Error) {
 	defer func() {
 		if r := recover(); r != nil {
 			// something panicked while evaluating node
@@ -903,13 +900,13 @@ func (rt *Runtime) isSet(node Node) (ok bool, err error) {
 	default:
 		// todo: maybe work some edge cases
 		if !(nodeType > beginExpressions && nodeType < endExpressions) {
-			return false, node.error(UnexpectedNodeReason, fmt.Sprintf("unexpected %q node in isset clause", node))
+			return false, node.error(e.UnexpectedNodeReason, fmt.Sprintf("unexpected %q node in isset clause", node))
 		}
 	}
 	return true, nil
 }
 
-func (rt *Runtime) evalNumericComparativeExpression(node *NumericComparativeExprNode) (reflect.Value, error) {
+func (rt *Runtime) evalNumericComparativeExpression(node *NumericComparativeExprNode) (reflect.Value, e.Error) {
 	left, err := rt.evalPrimaryExpressionGroup(node.Left)
 	if err != nil {
 		return reflect.Value{}, err
@@ -942,7 +939,7 @@ func (rt *Runtime) evalNumericComparativeExpression(node *NumericComparativeExpr
 				isTrue = left.Uint() > toUint(right)
 			}
 		} else {
-			return reflect.Value{}, node.Left.error(InvalidValueReason, "a non numeric value in numeric comparative expression")
+			return reflect.Value{}, node.Left.error(e.InvalidValueReason, "a non numeric value in numeric comparative expression")
 		}
 	case itemGreatEquals:
 		if isInt(kind) {
@@ -960,7 +957,7 @@ func (rt *Runtime) evalNumericComparativeExpression(node *NumericComparativeExpr
 				isTrue = left.Uint() >= toUint(right)
 			}
 		} else {
-			return reflect.Value{}, node.Left.error(InvalidValueReason, "a non numeric value in numeric comparative expression")
+			return reflect.Value{}, node.Left.error(e.InvalidValueReason, "a non numeric value in numeric comparative expression")
 		}
 	case itemLess:
 		if isInt(kind) {
@@ -978,7 +975,7 @@ func (rt *Runtime) evalNumericComparativeExpression(node *NumericComparativeExpr
 				isTrue = left.Uint() < toUint(right)
 			}
 		} else {
-			return reflect.Value{}, node.Left.error(InvalidValueReason, "a non numeric value in numeric comparative expression")
+			return reflect.Value{}, node.Left.error(e.InvalidValueReason, "a non numeric value in numeric comparative expression")
 		}
 	case itemLessEquals:
 		if isInt(kind) {
@@ -996,13 +993,13 @@ func (rt *Runtime) evalNumericComparativeExpression(node *NumericComparativeExpr
 				isTrue = left.Uint() <= toUint(right)
 			}
 		} else {
-			return reflect.Value{}, node.Left.error(InvalidValueReason, "a non numeric value in numeric comparative expression")
+			return reflect.Value{}, node.Left.error(e.InvalidValueReason, "a non numeric value in numeric comparative expression")
 		}
 	}
 	return reflect.ValueOf(isTrue), nil
 }
 
-func (rt *Runtime) evalLogicalExpression(node *LogicalExprNode) (reflect.Value, error) {
+func (rt *Runtime) evalLogicalExpression(node *LogicalExprNode) (reflect.Value, e.Error) {
 	left, err := rt.evalPrimaryExpressionGroup(node.Left)
 	if err != nil {
 		return reflect.Value{}, err
@@ -1020,7 +1017,7 @@ func (rt *Runtime) evalLogicalExpression(node *LogicalExprNode) (reflect.Value, 
 	return reflect.ValueOf(truthy), nil
 }
 
-func (rt *Runtime) evalComparativeExpression(node *ComparativeExprNode) (reflect.Value, error) {
+func (rt *Runtime) evalComparativeExpression(node *ComparativeExprNode) (reflect.Value, e.Error) {
 	left, err := rt.evalPrimaryExpressionGroup(node.Left)
 	if err != nil {
 		return reflect.Value{}, err
@@ -1038,7 +1035,7 @@ func (rt *Runtime) evalComparativeExpression(node *ComparativeExprNode) (reflect
 
 func toInt(v reflect.Value) int64 {
 	if !v.IsValid() {
-		panic(fmt.Errorf("invalid value can't be converted to int64"))
+		panic(e.InvalidValueErr.WithMessage("invalid value can't be converted to int64"))
 	}
 	kind := v.Kind()
 	if isInt(kind) {
@@ -1048,9 +1045,9 @@ func toInt(v reflect.Value) int64 {
 	} else if isUint(kind) {
 		return int64(v.Uint())
 	} else if kind == reflect.String {
-		n, e := strconv.ParseInt(v.String(), 10, 0)
-		if e != nil {
-			panic(e)
+		n, err := strconv.ParseInt(v.String(), 10, 0)
+		if err != nil {
+			panic(e.New().WithReason("invalid.parse").WithMessage(err.Error()))
 		}
 		return n
 	} else if kind == reflect.Bool {
@@ -1059,12 +1056,14 @@ func toInt(v reflect.Value) int64 {
 		}
 		return 1
 	}
-	panic(fmt.Errorf("type: %q can't be converted to int64", v.Type()))
+	panic(e.New().WithReason("invalid.type").
+		WithMessage(fmt.Sprintf("type: %q can't be converted to int64", v.Type())),
+	)
 }
 
 func toUint(v reflect.Value) uint64 {
 	if !v.IsValid() {
-		panic(fmt.Errorf("invalid value can't be converted to uint64"))
+		panic(e.InvalidValueErr.WithMessage("invalid value can't be converted to uint64"))
 	}
 	kind := v.Kind()
 	if isUint(kind) {
@@ -1074,9 +1073,9 @@ func toUint(v reflect.Value) uint64 {
 	} else if isFloat(kind) {
 		return uint64(v.Float())
 	} else if kind == reflect.String {
-		n, e := strconv.ParseUint(v.String(), 10, 0)
-		if e != nil {
-			panic(e)
+		n, err := strconv.ParseUint(v.String(), 10, 0)
+		if err != nil {
+			panic(e.New().WithReason("invalid.parse").WithMessage(err.Error()))
 		}
 		return n
 	} else if kind == reflect.Bool {
@@ -1085,12 +1084,14 @@ func toUint(v reflect.Value) uint64 {
 		}
 		return 1
 	}
-	panic(fmt.Errorf("type: %q can't be converted to uint64", v.Type()))
+	panic(e.New().WithReason("invalid.type").
+		WithMessage(fmt.Sprintf("type: %q can't be converted to uint64", v.Type())),
+	)
 }
 
 func toFloat(v reflect.Value) float64 {
 	if !v.IsValid() {
-		panic(fmt.Errorf("invalid value can't be converted to float64"))
+		panic(e.InvalidValueErr.WithMessage("invalid value can't be converted to float64"))
 	}
 	kind := v.Kind()
 	if isFloat(kind) {
@@ -1100,9 +1101,9 @@ func toFloat(v reflect.Value) float64 {
 	} else if isUint(kind) {
 		return float64(v.Uint())
 	} else if kind == reflect.String {
-		n, e := strconv.ParseFloat(v.String(), 0)
-		if e != nil {
-			panic(e)
+		n, err := strconv.ParseFloat(v.String(), 0)
+		if err != nil {
+			panic(e.New().WithReason("invalid.parse").WithMessage(err.Error()))
 		}
 		return n
 	} else if kind == reflect.Bool {
@@ -1111,10 +1112,12 @@ func toFloat(v reflect.Value) float64 {
 		}
 		return 1
 	}
-	panic(fmt.Errorf("type: %q can't be converted to float64", v.Type()))
+	panic(e.New().WithReason("invalid.type").
+		WithMessage(fmt.Sprintf("type: %q can't be converted to float64", v.Type())),
+	)
 }
 
-func (rt *Runtime) evalMultiplicativeExpression(node *MultiplicativeExprNode) (reflect.Value, error) {
+func (rt *Runtime) evalMultiplicativeExpression(node *MultiplicativeExprNode) (reflect.Value, e.Error) {
 	left, err := rt.evalPrimaryExpressionGroup(node.Left)
 	if err != nil {
 		return reflect.Value{}, err
@@ -1146,7 +1149,7 @@ func (rt *Runtime) evalMultiplicativeExpression(node *MultiplicativeExprNode) (r
 				left = reflect.ValueOf(left.Uint() * toUint(right))
 			}
 		} else {
-			return reflect.Value{}, node.Left.error(InvalidValueReason, "a non numeric value in multiplicative expression")
+			return reflect.Value{}, node.Left.error(e.InvalidValueReason, "a non numeric value in multiplicative expression")
 		}
 	case itemDiv:
 		if isInt(kind) {
@@ -1164,7 +1167,7 @@ func (rt *Runtime) evalMultiplicativeExpression(node *MultiplicativeExprNode) (r
 				left = reflect.ValueOf(left.Uint() / toUint(right))
 			}
 		} else {
-			return reflect.Value{}, node.Left.error(InvalidValueReason, "a non numeric value in multiplicative expression")
+			return reflect.Value{}, node.Left.error(e.InvalidValueReason, "a non numeric value in multiplicative expression")
 		}
 	case itemMod:
 		if isInt(kind) {
@@ -1180,7 +1183,7 @@ func (rt *Runtime) evalMultiplicativeExpression(node *MultiplicativeExprNode) (r
 	return left, nil
 }
 
-func (rt *Runtime) evalAdditiveExpression(node *AdditiveExprNode) (reflect.Value, error) {
+func (rt *Runtime) evalAdditiveExpression(node *AdditiveExprNode) (reflect.Value, e.Error) {
 	isAdditive := node.Operator.typ == itemAdd
 	if node.Left == nil {
 		right, err := rt.evalPrimaryExpressionGroup(node.Right)
@@ -1188,7 +1191,7 @@ func (rt *Runtime) evalAdditiveExpression(node *AdditiveExprNode) (reflect.Value
 			return reflect.Value{}, err
 		}
 		if !right.IsValid() {
-			return reflect.Value{}, node.error(InvalidValueReason, "right side of additive expression is invalid value")
+			return reflect.Value{}, node.error(e.InvalidValueReason, "right side of additive expression is invalid value")
 		}
 		kind := right.Kind()
 		// todo: optimize
@@ -1211,7 +1214,7 @@ func (rt *Runtime) evalAdditiveExpression(node *AdditiveExprNode) (reflect.Value
 				return reflect.ValueOf(-right.Float()), nil
 			}
 		}
-		return reflect.Value{}, node.Left.error(InvalidValueReason, fmt.Sprintf("additive expression: right side %s (%s) is not a numeric value (no left side)", node.Right, getTypeString(right)))
+		return reflect.Value{}, node.Left.error(e.InvalidValueReason, fmt.Sprintf("additive expression: right side %s (%s) is not a numeric value (no left side)", node.Right, getTypeString(right)))
 	}
 
 	left, err := rt.evalPrimaryExpressionGroup(node.Left)
@@ -1223,10 +1226,10 @@ func (rt *Runtime) evalAdditiveExpression(node *AdditiveExprNode) (reflect.Value
 		return reflect.Value{}, err
 	}
 	if !left.IsValid() {
-		return reflect.Value{}, node.error(InvalidValueReason, "left side of additive expression is invalid value")
+		return reflect.Value{}, node.error(e.InvalidValueReason, "left side of additive expression is invalid value")
 	}
 	if !right.IsValid() {
-		return reflect.Value{}, node.error(InvalidValueReason, "right side of additive expression is invalid value")
+		return reflect.Value{}, node.error(e.InvalidValueReason, "right side of additive expression is invalid value")
 	}
 	kind := left.Kind()
 	// if the left value is not a float and the right is, we need to promote the left value to a float before the calculation
@@ -1246,7 +1249,7 @@ func (rt *Runtime) evalAdditiveExpression(node *AdditiveExprNode) (reflect.Value
 				left = reflect.ValueOf(float64(left.Uint()) - right.Float())
 			}
 		} else {
-			return reflect.Value{}, node.Left.error(InvalidValueReason, fmt.Sprintf("additive expression: left side (%s (%s) needs float promotion but neither int nor uint)", node.Left, getTypeString(left)))
+			return reflect.Value{}, node.Left.error(e.InvalidValueReason, fmt.Sprintf("additive expression: left side (%s (%s) needs float promotion but neither int nor uint)", node.Left, getTypeString(left)))
 		}
 	} else {
 		if isInt(kind) {
@@ -1277,7 +1280,7 @@ func (rt *Runtime) evalAdditiveExpression(node *AdditiveExprNode) (reflect.Value
 			}
 			left = reflect.ValueOf(left.String() + fmt.Sprint(right))
 		} else {
-			return reflect.Value{}, node.Left.error(InvalidValueReason, fmt.Sprintf("additive expression: left side %s (%s) is not a numeric value", node.Left, getTypeString(left)))
+			return reflect.Value{}, node.Left.error(e.InvalidValueReason, fmt.Sprintf("additive expression: left side %s (%s) is not a numeric value", node.Left, getTypeString(left)))
 		}
 	}
 
@@ -1291,7 +1294,7 @@ func getTypeString(value reflect.Value) string {
 	return "<invalid>"
 }
 
-func (rt *Runtime) evalBaseExpressionGroup(node Node) (reflect.Value, error) {
+func (rt *Runtime) evalBaseExpressionGroup(node Node) (reflect.Value, e.Error) {
 	switch node.Type() {
 	case NodeNil:
 		return reflect.ValueOf(nil), nil
@@ -1303,17 +1306,21 @@ func (rt *Runtime) evalBaseExpressionGroup(node Node) (reflect.Value, error) {
 	case NodeString:
 		return reflect.ValueOf(&node.(*StringNode).Text).Elem(), nil
 	case NodeIdentifier:
-		return rt.resolve(node.(*IdentifierNode).Ident)
+		val, err := rt.resolve(node.(*IdentifierNode).Ident)
+		if err != nil {
+			return reflect.Value{}, node.error(err.Reason(), err.Message())
+		}
+		return val, nil
 	case NodeField:
 		node := node.(*FieldNode)
 		resolved := rt.context
 		for i := 0; i < len(node.Idents); i++ {
 			field, err := resolveIndex(resolved, reflect.Value{}, node.Idents[i].name, node.Idents[i].lax)
 			if err != nil {
-				return reflect.Value{}, node.error("", err.Error())
+				return reflect.Value{}, node.error(err.Reason(), err.Message())
 			}
 			if !field.IsValid() {
-				return reflect.Value{}, node.error(NotFoundFieldOrMethod, fmt.Sprintf("there is no field or method '%s' in %s (.%s)", node.Idents[i].name, getTypeString(resolved), strings.Join(node.Idents.names(), ".")))
+				return reflect.Value{}, node.error(e.NotFoundFieldOrMethodReason, fmt.Sprintf("there is no field or method '%s' in %s (.%s)", node.Idents[i].name, getTypeString(resolved), strings.Join(node.Idents.names(), ".")))
 			}
 			resolved = field
 		}
@@ -1321,7 +1328,7 @@ func (rt *Runtime) evalBaseExpressionGroup(node Node) (reflect.Value, error) {
 	case NodeChain:
 		resolved, err := rt.evalChainNodeExpression(node.(*ChainNode))
 		if err != nil {
-			return reflect.Value{}, node.error("", err.Error())
+			return reflect.Value{}, node.error(err.Reason(), err.Message())
 		}
 		return resolved, nil
 	case NodeNumber:
@@ -1338,16 +1345,18 @@ func (rt *Runtime) evalBaseExpressionGroup(node Node) (reflect.Value, error) {
 			return reflect.ValueOf(&node.Uint64).Elem(), nil
 		}
 	}
-	return reflect.Value{}, node.error(UnexpectedNodeTypeReason, fmt.Sprintf("unexpected node type %s in unary expression evaluating", node))
+	return reflect.Value{}, node.error(e.UnexpectedNodeTypeReason, fmt.Sprintf("unexpected node type %s in unary expression evaluating", node))
 }
 
-func (rt *Runtime) evalCallExpression(baseExpr reflect.Value, args CallArgs) (reflect.Value, error) {
+func (rt *Runtime) evalCallExpression(baseExpr reflect.Value, args CallArgs) (reflect.Value, e.Error) {
 	return rt.evalPipeCallExpression(baseExpr, args, nil)
 }
 
-func (rt *Runtime) evalPipeCallExpression(baseExpr reflect.Value, args CallArgs, pipedArg *reflect.Value) (reflect.Value, error) {
+func (rt *Runtime) evalPipeCallExpression(baseExpr reflect.Value, args CallArgs, pipedArg *reflect.Value) (reflect.Value, e.Error) {
 	if !baseExpr.IsValid() {
-		return reflect.Value{}, errors.New("base of call expression is invalid value")
+		return reflect.Value{}, e.New().
+			WithReason("invalid.value").
+			WithMessage("base of call expression is invalid value")
 	}
 	if funcType.AssignableTo(baseExpr.Type()) {
 		return baseExpr.Interface().(Func)(Arguments{runtime: rt, args: args, pipedVal: pipedArg}), nil
@@ -1355,7 +1364,7 @@ func (rt *Runtime) evalPipeCallExpression(baseExpr reflect.Value, args CallArgs,
 
 	argValues, err := rt.evaluateArgs(baseExpr.Type(), args, pipedArg)
 	if err != nil {
-		return reflect.Value{}, errBuilder().
+		return reflect.Value{}, e.New().
 			WithReason("invalid.call").
 			WithMessage(fmt.Sprintf("call expression: %v", err))
 	}
@@ -1368,7 +1377,7 @@ func (rt *Runtime) evalPipeCallExpression(baseExpr reflect.Value, args CallArgs,
 	return returns[0], nil
 }
 
-func (rt *Runtime) evalCommandExpression(node *CommandNode) (reflect.Value, bool, error) {
+func (rt *Runtime) evalCommandExpression(node *CommandNode) (reflect.Value, bool, e.Error) {
 	term, err := rt.evalPrimaryExpressionGroup(node.BaseExpr)
 	if err != nil {
 		return reflect.Value{}, false, err
@@ -1389,7 +1398,7 @@ func (rt *Runtime) evalCommandExpression(node *CommandNode) (reflect.Value, bool
 	return term, false, nil
 }
 
-func (rt *Runtime) evalChainNodeExpression(node *ChainNode) (reflect.Value, error) {
+func (rt *Runtime) evalChainNodeExpression(node *ChainNode) (reflect.Value, e.Error) {
 	resolved, err := rt.evalPrimaryExpressionGroup(node.Node)
 	if err != nil {
 		return reflect.Value{}, err
@@ -1399,7 +1408,7 @@ func (rt *Runtime) evalChainNodeExpression(node *ChainNode) (reflect.Value, erro
 		lax := node.Field[i].lax
 		field, err := resolveIndex(resolved, reflect.ValueOf(node.Field[i].name), node.Field[i].name, lax)
 		if err != nil {
-			return reflect.Value{}, err
+			return reflect.Value{}, node.error(err.Reason(), err.Message())
 		}
 		if !field.IsValid() {
 			if resolved.Kind() == reflect.Map && i == len(node.Field)-1 {
@@ -1407,8 +1416,8 @@ func (rt *Runtime) evalChainNodeExpression(node *ChainNode) (reflect.Value, erro
 				return reflect.Value{}, nil
 			}
 			if !lax {
-				return reflect.Value{}, errBuilder().
-					WithReason(NotFoundFieldOrMethod).
+				return reflect.Value{}, e.New().
+					WithReason(e.NotFoundFieldOrMethodReason).
 					WithMessage(fmt.Sprintf("there is no field or method '%s' in %s (%s)", node.Field[i].name, getTypeString(resolved), node))
 			}
 			field = reflect.ValueOf(nil)
@@ -1429,11 +1438,11 @@ func (w *escapeWriter) Write(b []byte) (int, error) {
 	return 0, nil
 }
 
-func (rt *Runtime) evalSafeWriter(term reflect.Value, node *CommandNode, v ...reflect.Value) error {
+func (rt *Runtime) evalSafeWriter(term reflect.Value, node *CommandNode, v ...reflect.Value) e.Error {
 	sw := &escapeWriter{rawWriter: rt.Writer, safeWriter: term.Interface().(SafeWriter)}
 	for i := 0; i < len(v); i++ {
 		if _, err := fastprinter.PrintValue(sw, v[i]); err != nil {
-			return err
+			return e.New().WithReason("invalid.arguments").WithMessage(err.Error())
 		}
 	}
 	for i := 0; i < len(node.Exprs); i++ {
@@ -1442,20 +1451,20 @@ func (rt *Runtime) evalSafeWriter(term reflect.Value, node *CommandNode, v ...re
 			return err
 		}
 		if _, err := fastprinter.PrintValue(sw, expression); err != nil {
-			return err
+			return e.New().WithReason("invalid.arguments").WithMessage(err.Error())
 		}
 	}
 
 	return nil
 }
 
-func (rt *Runtime) evalCommandPipeExpression(node *CommandNode, value reflect.Value) (reflect.Value, bool, error) {
+func (rt *Runtime) evalCommandPipeExpression(node *CommandNode, value reflect.Value) (reflect.Value, bool, e.Error) {
 	term, err := rt.evalPrimaryExpressionGroup(node.BaseExpr)
 	if err != nil {
 		return reflect.Value{}, false, err
 	}
 	if !term.IsValid() {
-		return reflect.Value{}, false, node.error(InvalidValueReason, "base expression of command pipe node is invalid value")
+		return reflect.Value{}, false, node.error(e.InvalidValueReason, "base expression of command pipe node is invalid value")
 	}
 	if term.Kind() != reflect.Func {
 		return reflect.Value{}, false, node.BaseExpr.error("", fmt.Sprintf("pipe command %q must be a function, but is %s", node.BaseExpr, term.Type()))
@@ -1472,29 +1481,29 @@ func (rt *Runtime) evalCommandPipeExpression(node *CommandNode, value reflect.Va
 	return ret, false, nil
 }
 
-func (rt *Runtime) evalPipelineExpression(node *PipeNode) (value reflect.Value, safeWriter bool, err error) {
+func (rt *Runtime) evalPipelineExpression(node *PipeNode) (value reflect.Value, safeWriter bool, err e.Error) {
 	value, safeWriter, err = rt.evalCommandExpression(node.Cmds[0])
 	if err != nil {
 		return reflect.Value{}, false, err
 	}
 	for i := 1; i < len(node.Cmds); i++ {
 		if safeWriter {
-			return reflect.Value{}, false, node.Cmds[i].error(UnexpectedCommand, fmt.Sprintf("unexpected command %s, writer command should be the last command", node.Cmds[i]))
+			return reflect.Value{}, false, node.Cmds[i].error(e.UnexpectedCommandReason, fmt.Sprintf("unexpected command %s, writer command should be the last command", node.Cmds[i]))
 		}
 		value, safeWriter, err = rt.evalCommandPipeExpression(node.Cmds[i], value)
 	}
 	return
 }
 
-func (rt *Runtime) evaluateArgs(fnType reflect.Type, args CallArgs, pipedArg *reflect.Value) ([]reflect.Value, error) {
+func (rt *Runtime) evaluateArgs(fnType reflect.Type, args CallArgs, pipedArg *reflect.Value) ([]reflect.Value, e.Error) {
 	numArgs := len(args.Exprs)
 	if !args.HasPipeSlot && pipedArg != nil {
 		numArgs++
 	}
 	numArgsRequired := fnType.NumIn()
 	isVariadic := fnType.IsVariadic()
-	invalidNumOfArgsError := errBuilder().
-		WithReason(InvalidNumberOfArguments).
+	invalidNumOfArgsError := e.New().
+		WithReason(e.InvalidNumberOfArgumentsReason).
 		WithMessage(fmt.Sprintf("%s needs at least %d arguments, but have %d", fnType, numArgsRequired, numArgs))
 	if isVariadic {
 		numArgsRequired--
@@ -1513,8 +1522,7 @@ func (rt *Runtime) evaluateArgs(fnType reflect.Type, args CallArgs, pipedArg *re
 	if !args.HasPipeSlot && pipedArg != nil {
 		in := fnType.In(slot)
 		if !(*pipedArg).IsValid() {
-			return nil, errBuilder().
-				WithReason(InvalidValueReason).
+			return nil, e.InvalidValueErr.
 				WithMessage(fmt.Sprintf("piped first argument for %s is not a valid value", fnType))
 		}
 		if !(*pipedArg).Type().AssignableTo(in) {
@@ -1526,11 +1534,10 @@ func (rt *Runtime) evaluateArgs(fnType reflect.Type, args CallArgs, pipedArg *re
 
 	i := 0 // index in parsed argument expression list
 
-	invalidArgError := errBuilder().
-		WithReason(InvalidValueReason).
+	invalidArgError := e.InvalidValueErr.
 		WithMessage(fmt.Sprintf("argument for position %d in %s is not a valid value", slot, fnType))
 
-	var err error
+	var err e.Error
 	for slot < numArgsRequired {
 		in := fnType.In(slot)
 		var term reflect.Value
@@ -1767,19 +1774,22 @@ func indirectEface(v reflect.Value) reflect.Value {
 // complex, it improves the memory allocation story for the most common
 // execution paths when executing a template, such as when accessing a field
 // element.
-func resolveIndex(v, index reflect.Value, indexAsStr string, lax bool) (reflect.Value, error) {
+func resolveIndex(v, index reflect.Value, indexAsStr string, lax bool) (reflect.Value, e.Error) {
 	if !v.IsValid() {
 		if lax {
 			return reflect.Value{}, nil
 		}
-		return reflect.Value{}, fmt.Errorf("there is no field or method '%s' in nil", indexAsStr)
+		return reflect.Value{}, e.New().
+			WithReason(e.NotFoundFieldOrMethodReason).
+			WithMessage(fmt.Sprintf("there is no field or method '%s' in nil", indexAsStr))
 	}
 
 	v, isNil := indirect(v)
 	if v.Kind() == reflect.Interface && isNil {
 		// Calling a method on a nil interface can't work. The
 		// MethodByName method call below would panic.
-		return reflect.Value{}, fmt.Errorf("nil pointer evaluating %s.%s", v.Type(), index)
+		return reflect.Value{}, e.InvalidValueErr.
+			WithMessage(fmt.Sprintf("nil pointer evaluating %s.%s", v.Type(), index))
 	}
 
 	// Handle the caller passing either index or indexAsStr.
@@ -1833,7 +1843,10 @@ func resolveIndex(v, index reflect.Value, indexAsStr string, lax bool) (reflect.
 		return indirectEface(v.Index(x)), nil
 	case reflect.Struct:
 		if !indexIsStr {
-			return reflect.Value{}, fmt.Errorf("can't use '%s' (%s, not string) as field name in struct type %s", index, indexAsValue().Type(), v.Type())
+			return reflect.Value{}, e.InvalidIndexErr.
+				WithMessage(fmt.Sprintf("can't use '%v' (%s, not string) as field name in struct type %s", index, indexAsValue().Type(), v.Type())).
+				WithDetail("object", v.String()).
+				WithDetail("index", fmt.Sprintf("%v", index))
 		}
 		typ := v.Type()
 		key := indexAsStr
@@ -1860,19 +1873,28 @@ func resolveIndex(v, index reflect.Value, indexAsStr string, lax bool) (reflect.
 		if ok {
 			field := v.FieldByIndex(tField.Index)
 			if tField.PkgPath != "" { // field is unexported
-				return reflect.Value{}, fmt.Errorf("%s is an unexported field of struct type %s", indexAsStr, v.Type())
+				return reflect.Value{}, e.InvalidIndexErr.
+					WithMessage(fmt.Sprintf("%s is an unexported field of struct type %s", indexAsStr, v.Type())).
+					WithDetail("object", v.String()).
+					WithDetail("index", fmt.Sprintf("%v", index))
 			}
 			return indirectEface(field), nil
 		}
 		if lax {
 			return reflect.Value{}, nil
 		}
-		return reflect.Value{}, fmt.Errorf("can't use '%s' as field name in struct type %s", indexAsStr, v.Type())
+		return reflect.Value{}, e.InvalidIndexErr.
+			WithMessage(fmt.Sprintf("can't use '%s' as field name in struct type %s", indexAsStr, v.Type())).
+			WithDetail("object", v.String()).
+			WithDetail("index", fmt.Sprintf("%v", index))
 	case reflect.Map:
 		// If it's a map, attempt to use the field name as a key.
 		indexVal := indexAsValue()
 		if !indexVal.Type().ConvertibleTo(v.Type().Key()) {
-			return reflect.Value{}, fmt.Errorf("can't use '%s' (%s) as key for map of type %s", indexAsStr, indexVal.Type(), v.Type())
+			return reflect.Value{}, e.InvalidIndexErr.
+				WithMessage(fmt.Sprintf("can't use '%s' (%s) as key for map of type %s", indexAsStr, indexVal.Type(), v.Type())).
+				WithDetail("object", v.String()).
+				WithDetail("index", fmt.Sprintf("%v", index))
 		}
 		index = indexVal.Convert(v.Type().Key()) // noop in most cases, but not expensive
 		return indirectEface(v.MapIndex(indexVal)), nil
@@ -1886,19 +1908,21 @@ func resolveIndex(v, index reflect.Value, indexAsStr string, lax bool) (reflect.
 			}
 		}
 		if isNil {
-			return reflect.Value{}, fmt.Errorf("nil pointer evaluating %s.%s", v.Type(), index)
+			return reflect.Value{}, e.InvalidValueErr.
+				WithMessage(fmt.Sprintf("nil pointer evaluating %s.%s", v.Type(), index))
 		}
 	}
 	if lax {
 		return reflect.Value{}, nil
 	}
-	return reflect.Value{}, fmt.Errorf("can't evaluate index %s (%s) in type %s", index, indexAsStr, getTypeString(v))
+	return reflect.Value{}, e.InvalidIndexErr.
+		WithMessage(fmt.Sprintf("can't evaluate index %s (%s) in type %s", index, indexAsStr, getTypeString(v)))
 }
 
 // from Go's text/template's funcs.go:
 //
 // indexArg checks if a reflect.Value can be used as an index, and converts it to int if possible.
-func indexArg(index reflect.Value, cap int) (int, error) {
+func indexArg(index reflect.Value, cap int) (int, e.Error) {
 	var x int64
 	switch index.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
@@ -1908,12 +1932,13 @@ func indexArg(index reflect.Value, cap int) (int, error) {
 	case reflect.Float32, reflect.Float64:
 		x = int64(index.Float())
 	case reflect.Invalid:
-		return 0, fmt.Errorf("cannot index slice/array/string with nil")
+		return 0, e.InvalidIndexErr.WithMessage("cannot index slice/array/string with nil")
 	default:
-		return 0, fmt.Errorf("cannot index slice/array/string with type %s", getTypeString(index))
+		return 0, e.InvalidIndexErr.
+			WithMessage(fmt.Sprintf("cannot index slice/array/string with type %s", getTypeString(index)))
 	}
 	if int(x) < 0 || int(x) >= cap {
-		return 0, fmt.Errorf("index out of range: %d", x)
+		return 0, e.InvalidIndexErr.WithMessage(fmt.Sprintf("index out of range: %d", x))
 	}
 	return int(x), nil
 }

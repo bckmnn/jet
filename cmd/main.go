@@ -43,7 +43,7 @@ func main() {
 		return
 	}
 
-	if err = template.Execute(os.Stdout, variables, map[string]interface{}{
+	if err := template.Execute(os.Stdout, variables, map[string]interface{}{
 		"Name": "vlad",
 		"Name2": map[string]interface{}{
 			"foo": map[string]interface{}{

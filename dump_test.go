@@ -16,6 +16,7 @@ package jet
 
 import (
 	"bytes"
+	"log"
 	"reflect"
 	"strings"
 	"testing"
@@ -65,6 +66,8 @@ func TestDump(t *testing.T) {
 	// compare what we got with what we wanted
 	got := strings.Split(rslt[0], "\n")
 	want := strings.Split(rslt[1], "\n")
+	log.Println("got", got)
+	log.Println("want", want)
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("\ngot :%q\nwant:%q\nAS TEXT\ngot\n%swant\n%s", got, want, rslt[0], rslt[1])
 	}

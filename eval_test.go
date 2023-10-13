@@ -597,8 +597,7 @@ func TestEvalStructFieldPointerExpressions(t *testing.T) {
 		t.Error(err)
 	}
 	buff := bytes.NewBuffer(nil)
-	err = tt.Execute(buff, data, nil)
-	if err == nil {
+	if err := tt.Execute(buff, data, nil); err == nil {
 		t.Error("expected evaluating field of nil struct to fail with a runtime error but got nil")
 	}
 }
