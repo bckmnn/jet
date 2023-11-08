@@ -16,7 +16,7 @@ package jet
 
 import (
 	"bytes"
-	"github.com/CloudyKit/jet/v6/utils/e"
+	"github.com/CloudyKit/jet/v6/errors"
 	"io/ioutil"
 	"path"
 	"strings"
@@ -90,20 +90,20 @@ func TestUsefulErrorOnLateImportOrExtends(t *testing.T) {
 	p := ParserTestCase{T: t}
 
 	templateName := "late_import.jet"
-	expectedError := e.Build(
-		e.UnexpectedKeywordReason,
+	expectedError := errors.Build(
+		errors.UnexpectedKeywordReason,
 		templateName,
 		"parsing command: unexpected keyword 'import' ('import' statements must be at the beginning of the template)",
-		&e.Position{L: 1, C: 0},
+		&errors.Position{L: 1, C: 14},
 	)
 	p.ExpectError(templateName, `<html><head>{{import "./foo.jet"}}</head></html>`, expectedError.Error())
 
 	templateName = "late_extends.jet"
-	expectedError = e.Build(
-		e.UnexpectedKeywordReason,
+	expectedError = errors.Build(
+		errors.UnexpectedKeywordReason,
 		templateName,
 		"parsing command: unexpected keyword 'extends' ('extends' statements must be at the beginning of the template)",
-		&e.Position{L: 1, C: 0},
+		&errors.Position{L: 1, C: 14},
 	)
 	p.ExpectError(templateName, `<html><head>{{extends "./foo.jet"}}</head></html>`, expectedError.Error())
 }
@@ -112,20 +112,20 @@ func TestKeywordsDisallowedAsBlockNames(t *testing.T) {
 	p := ParserTestCase{T: t}
 
 	templateName := "block_content.jet"
-	expectedError := e.Build(
-		e.UnexpectedKeywordReason,
+	expectedError := errors.Build(
+		errors.UnexpectedKeywordReason,
 		templateName,
 		"parsing block clause: unexpected keyword 'content' (expected name)",
-		&e.Position{L: 1, C: 0},
+		&errors.Position{L: 1, C: 9},
 	)
 	p.ExpectError(templateName, `{{ block content() }}bla{{ end }}`, expectedError.Error())
 
 	templateName = "block_if.jet"
-	expectedError = e.Build(
-		e.UnexpectedKeywordReason,
+	expectedError = errors.Build(
+		errors.UnexpectedKeywordReason,
 		templateName,
 		"parsing block clause: unexpected keyword 'if' (expected name)",
-		&e.Position{L: 1, C: 0},
+		&errors.Position{L: 1, C: 9},
 	)
 	p.ExpectError(templateName, `{{ block if() }}bla{{ end }}`, expectedError.Error())
 }

@@ -17,7 +17,7 @@ package jet
 import (
 	"bytes"
 	"fmt"
-	"github.com/CloudyKit/jet/v6/utils/e"
+	"github.com/CloudyKit/jet/v6/errors"
 	"runtime"
 	"strconv"
 	"strings"
@@ -152,21 +152,21 @@ func (t *Template) peekNonSpace() (token item) {
 }
 
 // errorf formats the error and terminates processing.
-func (t *Template) error(reason, message string) e.Error {
+func (t *Template) error(reason, message string) errors.Error {
 	t.Root = nil
 	if reason == "" {
-		reason = e.TemplateErrorReason
+		reason = errors.TemplateErrorReason
 	}
-	return e.Build(
+	return errors.Build(
 		reason,
 		t.ParseName,
 		message,
-		&e.Position{L: t.lex.lineNumber(), C: 0},
+		&errors.Position{L: t.lex.lineNumber(), C: 0},
 	)
 }
 
 // expect consumes the next token and guarantees it has the required type.
-func (t *Template) expect(expectedType itemType, context, expected string) e.Error {
+func (t *Template) expect(expectedType itemType, context, expected string) errors.Error {
 	token := t.nextNonSpace()
 	if token.typ != expectedType {
 		return t.unexpected(token, context, expected)
@@ -175,7 +175,7 @@ func (t *Template) expect(expectedType itemType, context, expected string) e.Err
 }
 
 // expectI consumes the next token and guarantees it has the required type.
-func (t *Template) expectI(expectedType itemType, context, expected string) (item, e.Error) {
+func (t *Template) expectI(expectedType itemType, context, expected string) (item, errors.Error) {
 	token := t.nextNonSpace()
 	if token.typ != expectedType {
 		return item{}, t.unexpected(token, context, expected)
@@ -183,16 +183,16 @@ func (t *Template) expectI(expectedType itemType, context, expected string) (ite
 	return token, nil
 }
 
-func (t *Template) expectRightDelim(context string) e.Error {
+func (t *Template) expectRightDelim(context string) errors.Error {
 	return t.expect(itemRightDelim, context, "closing delimiter")
 }
 
-func (t *Template) expectRightDelimI(context string) (item, e.Error) {
+func (t *Template) expectRightDelimI(context string) (item, errors.Error) {
 	return t.expectI(itemRightDelim, context, "closing delimiter")
 }
 
 // expectOneOf consumes the next token and guarantees it has one of the required types.
-func (t *Template) expectOneOf(expected1, expected2 itemType, context, expectedAs string) (item, e.Error) {
+func (t *Template) expectOneOf(expected1, expected2 itemType, context, expectedAs string) (item, errors.Error) {
 	token := t.nextNonSpace()
 	if token.typ != expected1 && token.typ != expected2 {
 		return item{}, t.unexpected(token, context, expectedAs)
@@ -201,15 +201,24 @@ func (t *Template) expectOneOf(expected1, expected2 itemType, context, expectedA
 }
 
 // unexpected complains about the token and terminates processing.
-func (t *Template) unexpected(token item, context, expected string) e.Error {
+func (t *Template) unexpected(token item, context, expected string) errors.Error {
 	switch {
 	case token.typ == itemImport,
 		token.typ == itemExtends:
-		return t.error(e.UnexpectedKeywordReason, fmt.Sprintf("parsing %s: unexpected keyword '%s' ('%s' statements must be at the beginning of the template)", context, token.val, token.val))
+		return t.error(
+			errors.UnexpectedKeywordReason,
+			fmt.Sprintf("parsing %s: unexpected keyword '%s' ('%s' statements must be at the beginning of the template)", context, token.val, token.val),
+		).WithColumn(errors.Column(token.pos))
 	case token.typ > itemKeyword:
-		return t.error(e.UnexpectedKeywordReason, fmt.Sprintf("parsing %s: unexpected keyword '%s' (expected %s)", context, token.val, expected))
+		return t.error(
+			errors.UnexpectedKeywordReason,
+			fmt.Sprintf("parsing %s: unexpected keyword '%s' (expected %s)", context, token.val, expected),
+		).WithColumn(errors.Column(token.pos))
 	default:
-		return t.error(e.UnexpectedTokenReason, fmt.Sprintf("parsing %s: unexpected token '%s' (expected %s)", context, token.val, expected))
+		return t.error(
+			errors.UnexpectedTokenReason,
+			fmt.Sprintf("parsing %s: unexpected token '%s' (expected %s)", context, token.val, expected),
+		).WithColumn(errors.Column(token.pos))
 	}
 }
 
@@ -229,7 +238,7 @@ func (t *Template) recover(errp *error) {
 	return
 }
 
-func (s *Set) parse(name, text string, cacheAfterParsing bool) (t *Template, err e.Error) {
+func (s *Set) parse(name, text string, cacheAfterParsing bool) (t *Template, err errors.Error) {
 	t = &Template{
 		Name:         name,
 		ParseName:    name,
@@ -260,7 +269,7 @@ func (s *Set) parse(name, text string, cacheAfterParsing bool) (t *Template, err
 	return t, err
 }
 
-func (t *Template) expectString(context string) (string, e.Error) {
+func (t *Template) expectString(context string) (string, errors.Error) {
 	token, err := t.expectOneOf(itemString, itemRawString, context, "string literal")
 	if err != nil {
 		return "", err
@@ -274,7 +283,7 @@ func (t *Template) expectString(context string) (string, e.Error) {
 
 // parse is the top-level parser for a template, essentially the same
 // It runs to EOF.
-func (t *Template) parseTemplate(cacheAfterParsing bool) (next Node, err e.Error) {
+func (t *Template) parseTemplate(cacheAfterParsing bool) (next Node, err errors.Error) {
 	t.Root = t.newList(t.peek().pos)
 	// {{ extends|import stringLiteral }}
 	for t.peek().typ != itemEOF {
@@ -291,9 +300,9 @@ func (t *Template) parseTemplate(cacheAfterParsing bool) (next Node, err e.Error
 				}
 				if token.typ == itemExtends {
 					if t.extends != nil {
-						return nil, t.error(e.UnexpectedClauseReason, "Unexpected extends clause: each template can only extend one template")
+						return nil, t.error(errors.UnexpectedClauseReason, "Unexpected extends clause: each template can only extend one template")
 					} else if len(t.imports) > 0 {
-						return nil, t.error(e.UnexpectedClauseReason, "Unexpected extends clause: the 'extends' clause should come before all import clauses")
+						return nil, t.error(errors.UnexpectedClauseReason, "Unexpected extends clause: the 'extends' clause should come before all import clauses")
 					}
 					var err error
 					t.extends, err = t.set.getSiblingTemplate(s, t.Name, cacheAfterParsing)
@@ -327,7 +336,7 @@ func (t *Template) parseTemplate(cacheAfterParsing bool) (next Node, err e.Error
 		}
 		switch n.Type() {
 		case nodeEnd, nodeElse, nodeContent:
-			return nil, t.error(e.UnexpectedReason, fmt.Sprintf("unexpected %s", n))
+			return nil, t.error(errors.UnexpectedReason, fmt.Sprintf("unexpected %s", n))
 		default:
 			t.Root.append(n)
 		}
@@ -372,7 +381,7 @@ func IsEmptyTree(n Node) bool {
 	return false
 }
 
-func (t *Template) blockParametersList(isDeclaring bool, context string) (*BlockParameterList, e.Error) {
+func (t *Template) blockParametersList(isDeclaring bool, context string) (*BlockParameterList, errors.Error) {
 	block := &BlockParameterList{}
 
 	if err := t.expect(itemLeftParen, context, "opening parenthesis"); err != nil {
@@ -380,7 +389,7 @@ func (t *Template) blockParametersList(isDeclaring bool, context string) (*Block
 	}
 	for {
 		var expression Expression
-		var err e.Error
+		var err errors.Error
 		next := t.nextNonSpace()
 		if next.typ == itemIdentifier {
 			identifier := next.val
@@ -432,7 +441,7 @@ func (t *Template) blockParametersList(isDeclaring bool, context string) (*Block
 	return block, nil
 }
 
-func (t *Template) parseBlock() (Node, e.Error) {
+func (t *Template) parseBlock() (Node, errors.Error) {
 	const context = "block clause"
 	var pipe Expression
 
@@ -474,7 +483,7 @@ func (t *Template) parseBlock() (Node, e.Error) {
 	return block, nil
 }
 
-func (t *Template) parseYield() (Node, e.Error) {
+func (t *Template) parseYield() (Node, errors.Error) {
 	const context = "yield clause"
 
 	var (
@@ -482,7 +491,7 @@ func (t *Template) parseYield() (Node, e.Error) {
 		name    item
 		bplist  *BlockParameterList
 		content *ListNode
-		err     e.Error
+		err     errors.Error
 	)
 
 	// parse block name
@@ -546,9 +555,9 @@ func (t *Template) parseYield() (Node, e.Error) {
 	return t.newYield(name.pos, t.lex.lineNumber(), name.val, bplist, pipe, content, false), nil
 }
 
-func (t *Template) parseInclude() (Node, e.Error) {
+func (t *Template) parseInclude() (Node, errors.Error) {
 	var context Expression
-	var err e.Error
+	var err errors.Error
 	name, err := t.expression("include", "template name")
 	if err != nil {
 		return nil, err
@@ -565,7 +574,7 @@ func (t *Template) parseInclude() (Node, e.Error) {
 	return t.newInclude(name.Position(), t.lex.lineNumber(), name, context), nil
 }
 
-func (t *Template) parseReturn() (Node, e.Error) {
+func (t *Template) parseReturn() (Node, errors.Error) {
 	value, err := t.expression("return", "value")
 	if err != nil {
 		return nil, err
@@ -581,7 +590,7 @@ func (t *Template) parseReturn() (Node, e.Error) {
 //	textOrAction*
 //
 // Terminates at any of the given nodes, returned separately.
-func (t *Template) itemList(terminatedBy ...NodeType) (list *ListNode, next Node, err e.Error) {
+func (t *Template) itemList(terminatedBy ...NodeType) (list *ListNode, next Node, err errors.Error) {
 	list = t.newList(t.peekNonSpace().pos)
 	for t.peekNonSpace().typ != itemEOF {
 		n, err := t.textOrAction()
@@ -596,13 +605,13 @@ func (t *Template) itemList(terminatedBy ...NodeType) (list *ListNode, next Node
 		list.append(n)
 	}
 
-	return list, next, t.error(e.UnexpectedReason, "unexpected EOF")
+	return list, next, t.error(errors.UnexpectedReason, "unexpected EOF")
 }
 
 // textOrAction:
 //
 //	text | action
-func (t *Template) textOrAction() (Node, e.Error) {
+func (t *Template) textOrAction() (Node, errors.Error) {
 	switch token := t.nextNonSpace(); token.typ {
 	case itemText:
 		return t.newText(token.pos, token.val), nil
@@ -613,7 +622,7 @@ func (t *Template) textOrAction() (Node, e.Error) {
 	}
 }
 
-func (t *Template) action() (n Node, err e.Error) {
+func (t *Template) action() (n Node, err errors.Error) {
 	switch token := t.nextNonSpace(); token.typ {
 	case itemInclude:
 		return t.parseInclude()
@@ -669,7 +678,7 @@ func (t *Template) action() (n Node, err e.Error) {
 	return action, nil
 }
 
-func (t *Template) logicalExpression(context string) (Expression, item, e.Error) {
+func (t *Template) logicalExpression(context string) (Expression, item, errors.Error) {
 	left, endtoken, err := t.comparativeExpression(context)
 	if err != nil {
 		return nil, item{}, err
@@ -684,7 +693,7 @@ func (t *Template) logicalExpression(context string) (Expression, item, e.Error)
 	return left, endtoken, nil
 }
 
-func (t *Template) parseExpression(context string) (Expression, item, e.Error) {
+func (t *Template) parseExpression(context string) (Expression, item, errors.Error) {
 	expression, endtoken, err := t.logicalExpression(context)
 	if err != nil {
 		return nil, item{}, err
@@ -709,7 +718,7 @@ func (t *Template) parseExpression(context string) (Expression, item, e.Error) {
 	return expression, endtoken, nil
 }
 
-func (t *Template) comparativeExpression(context string) (Expression, item, e.Error) {
+func (t *Template) comparativeExpression(context string) (Expression, item, errors.Error) {
 	left, endtoken, err := t.numericComparativeExpression(context)
 	if err != nil {
 		return nil, item{}, err
@@ -724,7 +733,7 @@ func (t *Template) comparativeExpression(context string) (Expression, item, e.Er
 	return left, endtoken, nil
 }
 
-func (t *Template) numericComparativeExpression(context string) (Expression, item, e.Error) {
+func (t *Template) numericComparativeExpression(context string) (Expression, item, errors.Error) {
 	left, endtoken, err := t.additiveExpression(context)
 	if err != nil {
 		return nil, item{}, err
@@ -739,7 +748,7 @@ func (t *Template) numericComparativeExpression(context string) (Expression, ite
 	return left, endtoken, nil
 }
 
-func (t *Template) additiveExpression(context string) (Expression, item, e.Error) {
+func (t *Template) additiveExpression(context string) (Expression, item, errors.Error) {
 	left, endtoken, err := t.multiplicativeExpression(context)
 	if err != nil {
 		return nil, item{}, err
@@ -754,7 +763,7 @@ func (t *Template) additiveExpression(context string) (Expression, item, e.Error
 	return left, endtoken, nil
 }
 
-func (t *Template) multiplicativeExpression(context string) (left Expression, endtoken item, err e.Error) {
+func (t *Template) multiplicativeExpression(context string) (left Expression, endtoken item, err errors.Error) {
 	left, endtoken, err = t.unaryExpression(context)
 	if err != nil {
 		return nil, item{}, err
@@ -770,7 +779,7 @@ func (t *Template) multiplicativeExpression(context string) (left Expression, en
 	return left, endtoken, nil
 }
 
-func (t *Template) unaryExpression(context string) (Expression, item, e.Error) {
+func (t *Template) unaryExpression(context string) (Expression, item, errors.Error) {
 	next := t.nextNonSpace()
 	switch next.typ {
 	case itemNot:
@@ -795,7 +804,7 @@ func (t *Template) unaryExpression(context string) (Expression, item, e.Error) {
 	return operand, t.nextNonSpace(), nil
 }
 
-func (t *Template) assignmentOrExpression(context string) (operand Expression, err e.Error) {
+func (t *Template) assignmentOrExpression(context string) (operand Expression, err errors.Error) {
 	t.peekNonSpace()
 	line := t.lex.lineNumber()
 	var right, left []Expression
@@ -827,7 +836,7 @@ func (t *Template) assignmentOrExpression(context string) (operand Expression, e
 			case NodeField, NodeChain, NodeIdentifier, NodeUnderscore:
 				left = append(left, operand)
 			default:
-				return nil, t.error(e.UnexpectedNodeReason, "unexpected node in assign")
+				return nil, t.error(errors.UnexpectedNodeReason, "unexpected node in assign")
 			}
 
 			switch returned.typ {
@@ -849,7 +858,7 @@ func (t *Template) assignmentOrExpression(context string) (operand Expression, e
 		if isLet {
 			for _, operand := range left {
 				if operand.Type() != NodeIdentifier && operand.Type() != NodeUnderscore {
-					if err = t.error(e.UnexpectedNodeTypeReason, fmt.Sprintf("unexpected node type %s in variable declaration", operand)); err != nil {
+					if err = t.error(errors.UnexpectedNodeTypeReason, fmt.Sprintf("unexpected node type %s in variable declaration", operand)); err != nil {
 						return nil, err
 					}
 				}
@@ -894,7 +903,7 @@ func (t *Template) assignmentOrExpression(context string) (operand Expression, e
 	return operand, nil
 }
 
-func (t *Template) expression(context, as string) (Expression, e.Error) {
+func (t *Template) expression(context, as string) (Expression, errors.Error) {
 	expr, tk, err := t.parseExpression(context)
 	if err != nil {
 		return nil, err
@@ -908,7 +917,7 @@ func (t *Template) expression(context, as string) (Expression, e.Error) {
 	return expr, nil
 }
 
-func (t *Template) pipeline(context string, baseExprMutate Expression) (pipe *PipeNode, err e.Error) {
+func (t *Template) pipeline(context string, baseExprMutate Expression) (pipe *PipeNode, err errors.Error) {
 	pos := t.peekNonSpace().pos
 	pipe = t.newPipeline(pos, t.lex.lineNumber())
 
@@ -950,10 +959,10 @@ func (t *Template) pipeline(context string, baseExprMutate Expression) (pipe *Pi
 	return pipe, nil
 }
 
-func (t *Template) command(baseExpr Expression) (*CommandNode, e.Error) {
+func (t *Template) command(baseExpr Expression) (*CommandNode, errors.Error) {
 	cmd := t.newCommand(t.peekNonSpace().pos)
 
-	var err e.Error
+	var err errors.Error
 	if baseExpr == nil {
 		baseExpr, err = t.expression("command", "name")
 		if err != nil {
@@ -997,7 +1006,7 @@ func (t *Template) command(baseExpr Expression) (*CommandNode, e.Error) {
 // An operand is a space-separated component of a command,
 // a term possibly followed by field accesses.
 // A nil return means the next item is not an operand.
-func (t *Template) operand(context string) (Expression, e.Error) {
+func (t *Template) operand(context string) (Expression, errors.Error) {
 	node, err := t.term()
 	if err != nil {
 		return nil, err
@@ -1007,7 +1016,7 @@ func (t *Template) operand(context string) (Expression, e.Error) {
 			return nil, err
 		}
 	}
-	lefBracketHandler := func(node Node, nullable bool) (Node, e.Error) {
+	lefBracketHandler := func(node Node, nullable bool) (Node, errors.Error) {
 		base := node
 		var index Expression
 		var next item
@@ -1062,7 +1071,7 @@ func (t *Template) operand(context string) (Expression, e.Error) {
 			case NodeField:
 				node = t.newField(chain.Position(), chain.String(), peek.typ == itemLaxField)
 			case NodeBool, NodeString, NodeNumber, NodeNil:
-				if err = t.error(e.UnexpectedReason, fmt.Sprintf("unexpected . after term %q", node.String())); err != nil {
+				if err = t.error(errors.UnexpectedReason, fmt.Sprintf("unexpected . after term %q", node.String())); err != nil {
 					return nil, err
 				}
 			default:
@@ -1111,7 +1120,7 @@ func (t *Template) operand(context string) (Expression, e.Error) {
 	}
 }
 
-func (t *Template) parseArguments() (args CallArgs, err e.Error) {
+func (t *Template) parseArguments() (args CallArgs, err errors.Error) {
 	context := "call expression argument list"
 	args.Exprs = []Expression{}
 loop:
@@ -1149,7 +1158,7 @@ loop:
 	return
 }
 
-func (t *Template) parseControl(allowElseIf bool, context string) (pos Pos, line int, set *SetNode, expression Expression, list, elseList *ListNode, err e.Error) {
+func (t *Template) parseControl(allowElseIf bool, context string) (pos Pos, line int, set *SetNode, expression Expression, list, elseList *ListNode, err errors.Error) {
 	line = t.lex.lineNumber()
 
 	expression, err = t.assignmentOrExpression(context)
@@ -1215,7 +1224,7 @@ func (t *Template) parseControl(allowElseIf bool, context string) (pos Pos, line
 //	{{if expression}} itemList {{else}} itemList {{end}}
 //
 // If keyword is past.
-func (t *Template) ifControl() (Node, e.Error) {
+func (t *Template) ifControl() (Node, errors.Error) {
 	pos, line, set, expression, list, elseList, err := t.parseControl(true, "if")
 	if err != nil {
 		return nil, err
@@ -1229,7 +1238,7 @@ func (t *Template) ifControl() (Node, e.Error) {
 //	{{range expression}} itemList {{else}} itemList {{end}}
 //
 // Range keyword is past.
-func (t *Template) rangeControl() (Node, e.Error) {
+func (t *Template) rangeControl() (Node, errors.Error) {
 	pos, line, set, expression, list, elseList, err := t.parseControl(false, "range")
 	if err != nil {
 		return nil, err
@@ -1242,7 +1251,7 @@ func (t *Template) rangeControl() (Node, e.Error) {
 //	{{end}}
 //
 // End keyword is past.
-func (t *Template) endControl() (Node, e.Error) {
+func (t *Template) endControl() (Node, errors.Error) {
 	item, err := t.expectRightDelimI("end")
 	if err != nil {
 		return nil, err
@@ -1255,7 +1264,7 @@ func (t *Template) endControl() (Node, e.Error) {
 //	{{content}}
 //
 // Content keyword is past.
-func (t *Template) contentControl() (Node, e.Error) {
+func (t *Template) contentControl() (Node, errors.Error) {
 	item, err := t.expectRightDelimI("content")
 	if err != nil {
 		return nil, err
@@ -1268,7 +1277,7 @@ func (t *Template) contentControl() (Node, e.Error) {
 //	{{else}}
 //
 // Else keyword is past.
-func (t *Template) elseControl() (Node, e.Error) {
+func (t *Template) elseControl() (Node, errors.Error) {
 	// Special case for "else if".
 	peek := t.peekNonSpace()
 	if peek.typ == itemIf {
@@ -1291,7 +1300,7 @@ func (t *Template) elseControl() (Node, e.Error) {
 //	 {{end}}
 //
 // try keyword is past.
-func (t *Template) parseTry() (*TryNode, e.Error) {
+func (t *Template) parseTry() (*TryNode, errors.Error) {
 	var recov *catchNode
 	line := t.lex.lineNumber()
 	item, err := t.expectRightDelimI("try")
@@ -1317,7 +1326,7 @@ func (t *Template) parseTry() (*TryNode, e.Error) {
 //	{{end}}
 //
 // catch keyword is past.
-func (t *Template) parseCatch() (*catchNode, e.Error) {
+func (t *Template) parseCatch() (*catchNode, errors.Error) {
 	line := t.lex.lineNumber()
 	var errVar *IdentifierNode
 	peek := t.peekNonSpace()
@@ -1327,7 +1336,7 @@ func (t *Template) parseCatch() (*catchNode, e.Error) {
 			return nil, err
 		}
 		if typ := _errVar.Type(); typ != NodeIdentifier {
-			return nil, t.error(e.UnexpectedNodeTypeReason, fmt.Sprintf("unexpected node type '%v' in catch", typ))
+			return nil, t.error(errors.UnexpectedNodeTypeReason, fmt.Sprintf("unexpected node type '%v' in catch", typ))
 		}
 		errVar = _errVar.(*IdentifierNode)
 	}
@@ -1355,7 +1364,7 @@ func (t *Template) parseCatch() (*catchNode, e.Error) {
 //
 // A term is a simple "expression".
 // A nil return means the next item is not a term.
-func (t *Template) term() (Node, e.Error) {
+func (t *Template) term() (Node, errors.Error) {
 	switch token := t.nextNonSpace(); token.typ {
 	case itemError:
 		return nil, t.error("item.error", fmt.Sprintf("%s", token.val))

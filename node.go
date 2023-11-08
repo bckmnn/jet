@@ -17,7 +17,7 @@ package jet
 import (
 	"bytes"
 	"fmt"
-	"github.com/CloudyKit/jet/v6/utils/e"
+	"github.com/CloudyKit/jet/v6/errors"
 )
 
 var textFormat = "%s" // Changed to "%q" in tests for better error messages.
@@ -27,7 +27,7 @@ type Node interface {
 	String() string
 	Position() Pos
 	line() int
-	error(e.Reason, e.Message) e.Error
+	error(errors.Reason, errors.Message) errors.Error
 }
 
 type Expression interface {
@@ -56,15 +56,15 @@ func (n *NodeBase) line() int {
 	return n.Line
 }
 
-func (n *NodeBase) error(reason e.Reason, message e.Message) e.Error {
+func (n *NodeBase) error(reason errors.Reason, message errors.Message) errors.Error {
 	if reason == "" {
-		reason = e.RuntimeErrorReason
+		reason = errors.RuntimeErrorReason
 	}
-	return e.Build(
+	return errors.Build(
 		reason,
 		n.TemplatePath,
 		message,
-		&e.Position{L: n.Line, C: 0},
+		&errors.Position{L: n.Line, C: 0},
 	)
 }
 

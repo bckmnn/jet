@@ -1,8 +1,6 @@
-package e
+package errors
 
-import (
-	"fmt"
-)
+import "fmt"
 
 type Builder struct {
 	T Template  `json:"template,omitempty"`
@@ -67,6 +65,16 @@ func (b *Builder) Position() *Position {
 
 func (b *Builder) WithPosition(l Line, c Column) Error {
 	b.P = &Position{L: l, C: c}
+	return b
+}
+
+func (b *Builder) WithLine(l Line) Error {
+	b.P.L = l
+	return b
+}
+
+func (b *Builder) WithColumn(c Column) Error {
+	b.P.C = c
 	return b
 }
 

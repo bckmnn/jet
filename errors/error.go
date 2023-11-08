@@ -1,4 +1,4 @@
-package e
+package errors
 
 type Error interface {
 	error
@@ -12,6 +12,8 @@ type Error interface {
 
 	Position() *Position
 	WithPosition(Line, Column) Error
+	WithLine(Line) Error
+	WithColumn(Column) Error
 
 	Details() Details
 	WithDetail(string, string) Error

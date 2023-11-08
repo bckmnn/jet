@@ -1,6 +1,8 @@
 package jet
 
-import "sync"
+import (
+	"sync"
+)
 
 // Cache is the interface Jet uses to store and retrieve parsed templates.
 type Cache interface {

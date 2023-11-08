@@ -16,7 +16,7 @@ package jet
 
 import (
 	"fmt"
-	"github.com/CloudyKit/jet/v6/utils/e"
+	"github.com/CloudyKit/jet/v6/errors"
 	"reflect"
 	"time"
 )
@@ -74,7 +74,7 @@ func (a *Arguments) Panicf(format string, v ...interface{}) {
 func (a *Arguments) RequireNumOfArguments(funcname string, min, max int) {
 	num := a.NumOfArguments()
 	if (min >= 0 && num < min) || (max >= 0 && num > max) {
-		a.Panicf(e.New().
+		a.Panicf(errors.New().
 			WithReason("unexpected.number_of_arguments").
 			WithMessage(fmt.Sprintf("unexpected number of arguments in a call to %s", funcname)).Error(),
 		)
@@ -101,9 +101,9 @@ func (a *Arguments) Runtime() *Runtime {
 // Allowed pointer types are pointers to interface{}, int, int64, float64, bool, string,  time.Time, reflect.Value, []interface{},
 // map[string]interface{}. If a pointer to a reflect.Value is passed in, the argument be assigned as-is to the value pointed to. For
 // pointers to int or float types, type conversion is performed automatically if necessary.
-func (a *Arguments) ParseInto(ptrs ...interface{}) e.Error {
+func (a *Arguments) ParseInto(ptrs ...interface{}) errors.Error {
 	if len(ptrs) < a.NumOfArguments() {
-		return e.New().
+		return errors.New().
 			WithReason("invalid.number_of_arguments").
 			WithMessage(fmt.Sprintf("have %d arguments, but only %d pointers to parse into", a.NumOfArguments(), len(ptrs)))
 	}
@@ -113,11 +113,11 @@ func (a *Arguments) ParseInto(ptrs ...interface{}) e.Error {
 		ok := false
 
 		if !arg.IsValid() {
-			return e.InvalidValueErr.
+			return errors.InvalidValueErr.
 				WithMessage(fmt.Sprintf("argument at position %d is not a valid value", i))
 		}
 
-		couldNotParseErr := e.InvalidValueErr.
+		couldNotParseErr := errors.InvalidValueErr.
 			WithMessage(fmt.Sprintf("could not parse %v (%s) into %v (%T)", arg, arg.Type(), ptr, ptr))
 
 		switch p := ptr.(type) {
@@ -157,7 +157,7 @@ func (a *Arguments) ParseInto(ptrs ...interface{}) e.Error {
 		}
 
 		if !arg.CanInterface() {
-			return e.InvalidValueErr.
+			return errors.InvalidValueErr.
 				WithMessage(fmt.Sprintf("argument at position %d can't be accessed via Interface()", i))
 		}
 		val := arg.Interface()
@@ -176,7 +176,7 @@ func (a *Arguments) ParseInto(ptrs ...interface{}) e.Error {
 		case *map[string]interface{}:
 			*p, ok = val.(map[string]interface{})
 		default:
-			return e.New().
+			return errors.New().
 				WithReason("invalid.value.type").
 				WithMessage(fmt.Sprintf("trying to parse %v into %v: unhandled value type %T", arg, p, val))
 		}
