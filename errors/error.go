@@ -10,7 +10,7 @@ type Error interface {
 	Message() Message
 	WithMessage(Message) Error
 
-	Position() *Position
+	Position() Position
 	WithPosition(Line, Column) Error
 	WithLine(Line) Error
 	WithColumn(Column) Error

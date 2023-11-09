@@ -23,18 +23,22 @@ import (
 
 // item represents a token or text string returned from the scanner.
 type item struct {
-	typ itemType // The type of this item.
-	pos Pos      // The starting position, in bytes, of this item in the input string.
-	val string   // The value of this item.
+	kind itemKind // The type of this item.
+	pos  Pos      // The starting position, in bytes, of this item in the input string.
+	val  string   // The value of this item.
+
+	row int // The row of this item in the input string
+	col int // The col of this item in the input string
+	len int // The len of this item in count of symbols
 }
 
 func (i item) String() string {
 	switch {
-	case i.typ == itemEOF:
+	case i.kind == itemEOF:
 		return "EOF"
-	case i.typ == itemError:
+	case i.kind == itemError:
 		return i.val
-	case i.typ > itemKeyword:
+	case i.kind > itemKeyword:
 		return fmt.Sprintf("<%s>", i.val)
 	case len(i.val) > 10:
 		return fmt.Sprintf("%.10q...", i.val)
@@ -42,11 +46,11 @@ func (i item) String() string {
 	return fmt.Sprintf("%q", i.val)
 }
 
-// itemType identifies the type of newLexer items.
-type itemType int
+// itemKind identifies the kind of newLexer items.
+type itemKind int
 
 const (
-	itemError        itemType = iota // error occurred; value is text of error
+	itemError        itemKind = iota // error occurred; value is text of error
 	itemBool                         // boolean constant
 	itemChar                         // printable ASCII character; grab bag for comma etc.
 	itemCharConstant                 // character constant
@@ -108,7 +112,7 @@ const (
 	itemTrans
 )
 
-var key = map[string]itemType{
+var key = map[string]itemKind{
 	"extends": itemExtends,
 	"import":  itemImport,
 
@@ -165,7 +169,7 @@ type lexer struct {
 	curItem        Pos     // position of current item
 	items          []item  // slice of scanned items
 	parenDepth     int     // nesting depth of ( ) exprs
-	lastType       itemType
+	lastKind       itemKind
 	leftDelim      string
 	rightDelim     string
 	trimRightDelim string
@@ -205,9 +209,9 @@ func (l *lexer) backup() {
 }
 
 // emit passes an item back to the client.
-func (l *lexer) emit(t itemType) {
-	l.lastType = t
-	l.items = append(l.items, item{t, l.start, l.input[l.start:l.pos]})
+func (l *lexer) emit(t itemKind) {
+	l.lastKind = t
+	l.items = append(l.items, item{kind: t, pos: l.start, val: l.input[l.start:l.pos], row: l.rowNumber(), col: l.colNumber(), len: int(l.pos - l.start)})
 	l.start = l.pos
 }
 
@@ -239,10 +243,18 @@ func (l *lexer) lineNumber() int {
 	return 1 + strings.Count(l.input[:l.lastPos], "\n")
 }
 
+func (l *lexer) rowNumber() int {
+	return 1 + strings.Count(l.input[:l.start], "\n")
+}
+
+func (l *lexer) colNumber() int {
+	return int(l.pos) - strings.Index(l.input[:l.start], "\n") - int(l.pos-l.start)
+}
+
 // errorf returns an error token and terminates the scan by passing
 // back a nil pointer that will be the next state, terminating l.nextItem.
 func (l *lexer) errorf(format string, args ...interface{}) stateFn {
-	l.items = append(l.items, item{itemError, l.start, fmt.Sprintf(format, args...)})
+	l.items = append(l.items, item{kind: itemError, pos: l.start, val: fmt.Sprintf(format, args...), row: l.rowNumber(), col: l.colNumber(), len: 0})
 	return nil
 }
 
@@ -402,34 +414,34 @@ func lexInsideAction(l *lexer) stateFn {
 		l.emit(itemMod)
 	case r == '-':
 		if r := l.peek(); '0' <= r && r <= '9' &&
-			itemAdd != l.lastType &&
-			itemMinus != l.lastType &&
-			itemNumber != l.lastType &&
-			itemIdentifier != l.lastType &&
-			itemString != l.lastType &&
-			itemRawString != l.lastType &&
-			itemCharConstant != l.lastType &&
-			itemBool != l.lastType &&
-			itemField != l.lastType &&
-			itemChar != l.lastType &&
-			itemTrans != l.lastType {
+			itemAdd != l.lastKind &&
+			itemMinus != l.lastKind &&
+			itemNumber != l.lastKind &&
+			itemIdentifier != l.lastKind &&
+			itemString != l.lastKind &&
+			itemRawString != l.lastKind &&
+			itemCharConstant != l.lastKind &&
+			itemBool != l.lastKind &&
+			itemField != l.lastKind &&
+			itemChar != l.lastKind &&
+			itemTrans != l.lastKind {
 			l.backup()
 			return lexNumber
 		}
 		l.emit(itemMinus)
 	case r == '+':
 		if r := l.peek(); '0' <= r && r <= '9' &&
-			itemAdd != l.lastType &&
-			itemMinus != l.lastType &&
-			itemNumber != l.lastType &&
-			itemIdentifier != l.lastType &&
-			itemString != l.lastType &&
-			itemRawString != l.lastType &&
-			itemCharConstant != l.lastType &&
-			itemBool != l.lastType &&
-			itemField != l.lastType &&
-			itemChar != l.lastType &&
-			itemTrans != l.lastType {
+			itemAdd != l.lastKind &&
+			itemMinus != l.lastKind &&
+			itemNumber != l.lastKind &&
+			itemIdentifier != l.lastKind &&
+			itemString != l.lastKind &&
+			itemRawString != l.lastKind &&
+			itemCharConstant != l.lastKind &&
+			itemBool != l.lastKind &&
+			itemField != l.lastKind &&
+			itemChar != l.lastKind &&
+			itemTrans != l.lastKind {
 			l.backup()
 			return lexNumber
 		}

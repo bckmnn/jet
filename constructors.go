@@ -21,76 +21,76 @@ import (
 )
 
 func (t *Template) newSliceExpr(pos Pos, line int, base, index, endIndex Expression) *SliceExprNode {
-	return &SliceExprNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeSliceExpr, Pos: pos, Line: line}, Index: index, Base: base, EndIndex: endIndex}
+	return &SliceExprNode{NodeBase: NodeBase{TemplatePath: t.Name, Line: line, Item: t.curToken, NodeType: NodeSliceExpr, Pos: pos}, Index: index, Base: base, EndIndex: endIndex}
 }
 
-func (t *Template) newIndexExpr(pos Pos, line int, base, index Expression, nullable bool) *IndexExprNode {
-	return &IndexExprNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeIndexExpr, Pos: pos, Line: line}, Index: index, Base: base, Nullable: nullable}
+func (t *Template) newIndexExpr(pos Pos, line int, base, index Expression, lax bool) *IndexExprNode {
+	return &IndexExprNode{NodeBase: NodeBase{TemplatePath: t.Name, Line: line, Item: t.curToken, NodeType: NodeIndexExpr, Pos: pos}, Index: index, Base: base, Lax: lax}
 }
 
 func (t *Template) newTernaryExpr(pos Pos, line int, boolean, left, right Expression) *TernaryExprNode {
-	return &TernaryExprNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeTernaryExpr, Pos: pos, Line: line}, Boolean: boolean, Left: left, Right: right}
+	return &TernaryExprNode{NodeBase: NodeBase{TemplatePath: t.Name, Line: line, Item: t.curToken, NodeType: NodeTernaryExpr, Pos: pos}, Boolean: boolean, Left: left, Right: right}
 }
 
 func (t *Template) newSet(pos Pos, line int, isLet, isIndexExprGetLookup bool, left, right []Expression) *SetNode {
-	return &SetNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeSet, Pos: pos, Line: line}, Let: isLet, IndexExprGetLookup: isIndexExprGetLookup, Left: left, Right: right}
+	return &SetNode{NodeBase: NodeBase{TemplatePath: t.Name, Line: line, Item: t.curToken, NodeType: NodeSet, Pos: pos}, Let: isLet, IndexExprGetLookup: isIndexExprGetLookup, Left: left, Right: right}
 }
 
 func (t *Template) newCallExpr(pos Pos, line int, expr Expression) *CallExprNode {
-	return &CallExprNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeCallExpr, Pos: pos, Line: line}, BaseExpr: expr}
+	return &CallExprNode{NodeBase: NodeBase{TemplatePath: t.Name, Line: line, Item: t.curToken, NodeType: NodeCallExpr, Pos: pos}, BaseExpr: expr}
 }
 
 func (t *Template) newNotExpr(pos Pos, line int, expr Expression) *NotExprNode {
-	return &NotExprNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeNotExpr, Pos: pos, Line: line}, Expr: expr}
+	return &NotExprNode{NodeBase: NodeBase{TemplatePath: t.Name, Line: line, Item: t.curToken, NodeType: NodeNotExpr, Pos: pos}, Expr: expr}
 }
 
 func (t *Template) newNumericComparativeExpr(pos Pos, line int, left, right Expression, item item) *NumericComparativeExprNode {
-	return &NumericComparativeExprNode{binaryExprNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeNumericComparativeExpr, Pos: pos, Line: line}, Operator: item, Left: left, Right: right}}
+	return &NumericComparativeExprNode{binaryExprNode{NodeBase: NodeBase{TemplatePath: t.Name, Line: line, Item: t.curToken, NodeType: NodeNumericComparativeExpr, Pos: pos}, Operator: item, Left: left, Right: right}}
 }
 
 func (t *Template) newComparativeExpr(pos Pos, line int, left, right Expression, item item) *ComparativeExprNode {
-	return &ComparativeExprNode{binaryExprNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeComparativeExpr, Pos: pos, Line: line}, Operator: item, Left: left, Right: right}}
+	return &ComparativeExprNode{binaryExprNode{NodeBase: NodeBase{TemplatePath: t.Name, Line: line, Item: t.curToken, NodeType: NodeComparativeExpr, Pos: pos}, Operator: item, Left: left, Right: right}}
 }
 
 func (t *Template) newLogicalExpr(pos Pos, line int, left, right Expression, item item) *LogicalExprNode {
-	return &LogicalExprNode{binaryExprNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeLogicalExpr, Pos: pos, Line: line}, Operator: item, Left: left, Right: right}}
+	return &LogicalExprNode{binaryExprNode{NodeBase: NodeBase{TemplatePath: t.Name, Line: line, Item: t.curToken, NodeType: NodeLogicalExpr, Pos: pos}, Operator: item, Left: left, Right: right}}
 }
 
 func (t *Template) newMultiplicativeExpr(pos Pos, line int, left, right Expression, item item) *MultiplicativeExprNode {
-	return &MultiplicativeExprNode{binaryExprNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeMultiplicativeExpr, Pos: pos, Line: line}, Operator: item, Left: left, Right: right}}
+	return &MultiplicativeExprNode{binaryExprNode{NodeBase: NodeBase{TemplatePath: t.Name, Line: line, Item: t.curToken, NodeType: NodeMultiplicativeExpr, Pos: pos}, Operator: item, Left: left, Right: right}}
 }
 
 func (t *Template) newAdditiveExpr(pos Pos, line int, left, right Expression, item item) *AdditiveExprNode {
-	return &AdditiveExprNode{binaryExprNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeAdditiveExpr, Pos: pos, Line: line}, Operator: item, Left: left, Right: right}}
+	return &AdditiveExprNode{binaryExprNode{NodeBase: NodeBase{TemplatePath: t.Name, Line: line, Item: t.curToken, NodeType: NodeAdditiveExpr, Pos: pos}, Operator: item, Left: left, Right: right}}
 }
 
 func (t *Template) newList(pos Pos) *ListNode {
-	return &ListNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeList, Pos: pos}}
+	return &ListNode{NodeBase: NodeBase{TemplatePath: t.Name, Item: t.curToken, NodeType: NodeList, Pos: pos}}
 }
 
 func (t *Template) newText(pos Pos, text string) *TextNode {
-	return &TextNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeText, Pos: pos}, Text: []byte(text)}
+	return &TextNode{NodeBase: NodeBase{TemplatePath: t.Name, Item: t.curToken, NodeType: NodeText, Pos: pos}, Text: []byte(text)}
 }
 
 func (t *Template) newPipeline(pos Pos, line int) *PipeNode {
-	return &PipeNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodePipe, Pos: pos, Line: line}}
+	return &PipeNode{NodeBase: NodeBase{TemplatePath: t.Name, Line: line, Item: t.curToken, NodeType: NodePipe, Pos: pos}}
 }
 
 func (t *Template) newAction(pos Pos, line int) *ActionNode {
-	return &ActionNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeAction, Pos: pos, Line: line}}
+	return &ActionNode{NodeBase: NodeBase{TemplatePath: t.Name, Line: line, Item: t.curToken, NodeType: NodeAction, Pos: pos}}
 }
 
 func (t *Template) newCommand(pos Pos) *CommandNode {
-	return &CommandNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeCommand, Pos: pos}}
+	return &CommandNode{NodeBase: NodeBase{TemplatePath: t.Name, Item: t.curToken, NodeType: NodeCommand, Pos: pos}}
 }
 
 func (t *Template) newNil(pos Pos) *NilNode {
-	return &NilNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeNil, Pos: pos}}
+	return &NilNode{NodeBase: NodeBase{TemplatePath: t.Name, Item: t.curToken, NodeType: NodeNil, Pos: pos}}
 }
 
 func (t *Template) newField(pos Pos, ident string, lax bool) *FieldNode {
 	return &FieldNode{
-		NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeField, Pos: pos},
+		NodeBase: NodeBase{TemplatePath: t.Name, Item: t.curToken, NodeType: NodeField, Pos: pos},
 		Idents: func(ident string, lax bool) Idents {
 			i, sep := 1, "."
 			if lax {
@@ -106,64 +106,64 @@ func (t *Template) newField(pos Pos, ident string, lax bool) *FieldNode {
 	}
 }
 
-func (t *Template) newChain(pos Pos, node Node) *ChainNode {
-	return &ChainNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeChain, Pos: pos}, Node: node}
+func (t *Template) newChain(pos Pos, line int, node Node) *ChainNode {
+	return &ChainNode{NodeBase: NodeBase{TemplatePath: t.Name, Line: line, Item: t.curToken, NodeType: NodeChain, Pos: pos}, Node: node}
 }
 
 func (t *Template) newBool(pos Pos, true bool) *BoolNode {
-	return &BoolNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeBool, Pos: pos}, True: true}
+	return &BoolNode{NodeBase: NodeBase{TemplatePath: t.Name, Item: t.curToken, NodeType: NodeBool, Pos: pos}, True: true}
 }
 
 func (t *Template) newString(pos Pos, orig, text string) *StringNode {
-	return &StringNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeString, Pos: pos}, Quoted: orig, Text: text}
+	return &StringNode{NodeBase: NodeBase{TemplatePath: t.Name, Item: t.curToken, NodeType: NodeString, Pos: pos}, Quoted: orig, Text: text}
 }
 
 func (t *Template) newEnd(pos Pos) *endNode {
-	return &endNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: nodeEnd, Pos: pos}}
+	return &endNode{NodeBase: NodeBase{TemplatePath: t.Name, Item: t.curToken, NodeType: nodeEnd, Pos: pos}}
 }
 
 func (t *Template) newContent(pos Pos) *contentNode {
-	return &contentNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: nodeContent, Pos: pos}}
+	return &contentNode{NodeBase: NodeBase{TemplatePath: t.Name, Item: t.curToken, NodeType: nodeContent, Pos: pos}}
 }
 
 func (t *Template) newElse(pos Pos, line int) *elseNode {
-	return &elseNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: nodeElse, Pos: pos, Line: line}}
+	return &elseNode{NodeBase: NodeBase{TemplatePath: t.Name, Line: line, Item: t.curToken, NodeType: nodeElse, Pos: pos}}
 }
 
 func (t *Template) newIf(pos Pos, line int, set *SetNode, pipe Expression, list, elseList *ListNode) *IfNode {
-	return &IfNode{BranchNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeIf, Pos: pos, Line: line}, Set: set, Expression: pipe, List: list, ElseList: elseList}}
+	return &IfNode{BranchNode{NodeBase: NodeBase{TemplatePath: t.Name, Line: line, Item: t.curToken, NodeType: NodeIf, Pos: pos}, Set: set, Expression: pipe, List: list, ElseList: elseList}}
 }
 
 func (t *Template) newRange(pos Pos, line int, set *SetNode, pipe Expression, list, elseList *ListNode) *RangeNode {
-	return &RangeNode{BranchNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeRange, Pos: pos, Line: line}, Set: set, Expression: pipe, List: list, ElseList: elseList}}
+	return &RangeNode{BranchNode{NodeBase: NodeBase{TemplatePath: t.Name, Line: line, Item: t.curToken, NodeType: NodeRange, Pos: pos}, Set: set, Expression: pipe, List: list, ElseList: elseList}}
 }
 
 func (t *Template) newBlock(pos Pos, line int, name string, parameters *BlockParameterList, pipe Expression, listNode, contentListNode *ListNode) *BlockNode {
-	return &BlockNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeBlock, Line: line, Pos: pos}, Name: name, Parameters: parameters, Expression: pipe, List: listNode, Content: contentListNode}
+	return &BlockNode{NodeBase: NodeBase{TemplatePath: t.Name, Line: line, Item: t.curToken, NodeType: NodeBlock, Pos: pos}, Name: name, Parameters: parameters, Expression: pipe, List: listNode, Content: contentListNode}
 }
 
 func (t *Template) newYield(pos Pos, line int, name string, bplist *BlockParameterList, pipe Expression, content *ListNode, isContent bool) *YieldNode {
-	return &YieldNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeYield, Pos: pos, Line: line}, Name: name, Parameters: bplist, Expression: pipe, Content: content, IsContent: isContent}
+	return &YieldNode{NodeBase: NodeBase{TemplatePath: t.Name, Line: line, Item: t.curToken, NodeType: NodeYield, Pos: pos}, Name: name, Parameters: bplist, Expression: pipe, Content: content, IsContent: isContent}
 }
 
 func (t *Template) newInclude(pos Pos, line int, name, context Expression) *IncludeNode {
-	return &IncludeNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeInclude, Pos: pos, Line: line}, Name: name, Context: context}
+	return &IncludeNode{NodeBase: NodeBase{TemplatePath: t.Name, Line: line, Item: t.curToken, NodeType: NodeInclude, Pos: pos}, Name: name, Context: context}
 }
 
 func (t *Template) newReturn(pos Pos, line int, pipe Expression) *ReturnNode {
-	return &ReturnNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeReturn, Pos: pos, Line: line}, Value: pipe}
+	return &ReturnNode{NodeBase: NodeBase{TemplatePath: t.Name, Line: line, Item: t.curToken, NodeType: NodeReturn, Pos: pos}, Value: pipe}
 }
 
 func (t *Template) newTry(pos Pos, line int, list *ListNode, catch *catchNode) *TryNode {
-	return &TryNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeTry, Pos: pos, Line: line}, List: list, Catch: catch}
+	return &TryNode{NodeBase: NodeBase{TemplatePath: t.Name, Line: line, Item: t.curToken, NodeType: NodeTry, Pos: pos}, List: list, Catch: catch}
 }
 
 func (t *Template) newCatch(pos Pos, line int, errVar *IdentifierNode, list *ListNode) *catchNode {
-	return &catchNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: nodeCatch, Pos: pos, Line: line}, Err: errVar, List: list}
+	return &catchNode{NodeBase: NodeBase{TemplatePath: t.Name, Line: line, Item: t.curToken, NodeType: nodeCatch, Pos: pos}, Err: errVar, List: list}
 }
 
-func (t *Template) newNumber(pos Pos, text string, typ itemType) (*NumberNode, error) {
-	n := &NumberNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeNumber, Pos: pos}, Text: text}
+func (t *Template) newNumber(pos Pos, text string, typ itemKind) (*NumberNode, error) {
+	n := &NumberNode{NodeBase: NodeBase{TemplatePath: t.Name, Item: t.curToken, NodeType: NodeNumber, Pos: pos}, Text: text}
 	// todo: optimize
 	switch typ {
 	case itemCharConstant:
@@ -252,9 +252,9 @@ func (t *Template) newNumber(pos Pos, text string, typ itemType) (*NumberNode, e
 }
 
 func (t *Template) newIdentifier(ident string, pos Pos, line int) *IdentifierNode {
-	return &IdentifierNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeIdentifier, Pos: pos, Line: line}, Ident: ident}
+	return &IdentifierNode{NodeBase: NodeBase{TemplatePath: t.Name, Line: line, Item: t.curToken, NodeType: NodeIdentifier, Pos: pos}, Ident: ident}
 }
 
 func (t *Template) newUnderscore(pos Pos, line int) *UnderscoreNode {
-	return &UnderscoreNode{NodeBase: NodeBase{TemplatePath: t.Name, NodeType: NodeUnderscore, Pos: pos, Line: line}}
+	return &UnderscoreNode{NodeBase: NodeBase{TemplatePath: t.Name, Line: line, Item: t.curToken, NodeType: NodeUnderscore, Pos: pos}}
 }

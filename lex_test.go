@@ -16,32 +16,32 @@ package jet
 
 import "testing"
 
-func lexerTestCaseCustomLexer(t *testing.T, lexer *lexer, input string, items ...itemType) {
+func lexerTestCaseCustomLexer(t *testing.T, lexer *lexer, input string, items ...itemKind) {
 	t.Helper()
 	for i := 0; i < len(items); i++ {
 		item := lexer.nextItem()
 
-		for item.typ == itemSpace {
+		for item.kind == itemSpace {
 			item = lexer.nextItem()
 		}
 
-		if item.typ != items[i] {
+		if item.kind != items[i] {
 			t.Errorf("Unexpected token %s on input on %q => %q", item, input, input[item.pos:])
 			return
 		}
 	}
 	item := lexer.nextItem()
-	if item.typ != itemEOF {
+	if item.kind != itemEOF {
 		t.Errorf("Unexpected token %s, expected EOF", item)
 	}
 }
 
-func lexerTestCase(t *testing.T, input string, items ...itemType) {
+func lexerTestCase(t *testing.T, input string, items ...itemKind) {
 	lexer := newLexer("test.flowRender", input, true)
 	lexerTestCaseCustomLexer(t, lexer, input, items...)
 }
 
-func lexerTestCaseCustomDelimiters(t *testing.T, leftDelim, rightDelim, input string, items ...itemType) {
+func lexerTestCaseCustomDelimiters(t *testing.T, leftDelim, rightDelim, input string, items ...itemKind) {
 	lexer := newLexer("test.customDelimiters", input, false)
 	lexer.setDelimiters(leftDelim, rightDelim)
 	lexer.lex()

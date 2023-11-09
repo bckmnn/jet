@@ -3,11 +3,11 @@ package errors
 import "fmt"
 
 type Builder struct {
-	T Template  `json:"template,omitempty"`
-	R Reason    `json:"reason,omitempty"`
-	M Message   `json:"message,omitempty"`
-	P *Position `json:"position,omitempty"`
-	D Details   `json:"details,omitempty"`
+	T Template `json:"template,omitempty"`
+	R Reason   `json:"reason,omitempty"`
+	M Message  `json:"message,omitempty"`
+	P Position `json:"position,omitempty"`
+	D Details  `json:"details,omitempty"`
 }
 
 type Position struct {
@@ -25,7 +25,7 @@ func (b *Builder) Error() string {
 	if b.T != "" {
 		place = fmt.Sprintf(" %s", b.T)
 
-		if b.P != nil {
+		if b.P.L != 0 {
 			place = fmt.Sprintf("%s:%d:%d", place, b.P.L, b.P.C)
 		}
 	}
@@ -59,12 +59,12 @@ func (b *Builder) WithMessage(m Message) Error {
 	return b
 }
 
-func (b *Builder) Position() *Position {
+func (b *Builder) Position() Position {
 	return b.P
 }
 
 func (b *Builder) WithPosition(l Line, c Column) Error {
-	b.P = &Position{L: l, C: c}
+	b.P = Position{L: l, C: c}
 	return b
 }
 
@@ -95,7 +95,7 @@ func (b *Builder) WithDetails(d Details) Error {
 	return b
 }
 
-func Build(r Reason, t Template, m Message, p *Position) Error {
+func Build(r Reason, t Template, m Message, p Position) Error {
 	return &Builder{
 		R: r,
 		T: t,

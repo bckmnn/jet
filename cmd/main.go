@@ -34,10 +34,10 @@ var (
 
 func main() {
 	set := jet.NewSet(
-		jet.NewOSFileSystemLoader("./cmd/testData"),
+		jet.NewOSFileSystemLoader("./cmd/data"),
 	)
 
-	template, err := set.GetTemplate("map.jet")
+	template, err := set.GetTemplate("test.jet")
 	if err != nil {
 		log.Println(err)
 		return

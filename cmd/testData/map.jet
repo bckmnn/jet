@@ -1,2 +1,0 @@
-{{ s := slice(1, 2, 3) }}
-{{- user?.Name?.Name.Name }}

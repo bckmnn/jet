@@ -43,9 +43,10 @@ type Template struct {
 	text string // text parsed to create the template (or its parent)
 
 	// Parsing only; cleared after parse.
-	lex       *lexer
-	token     [3]item // three-token lookahead for parser.
-	peekCount int
+	lex             *lexer
+	curToken        item
+	lookaheadTokens [3]item // three-token lookahead for parser.
+	peekCount       int
 }
 
 func (t *Template) String() (template string) {
@@ -92,9 +93,10 @@ func (t *Template) next() item {
 	if t.peekCount > 0 {
 		t.peekCount--
 	} else {
-		t.token[0] = t.lex.nextItem()
+		t.lookaheadTokens[0] = t.lex.nextItem()
+		t.curToken = t.lookaheadTokens[0]
 	}
-	return t.token[t.peekCount]
+	return t.lookaheadTokens[t.peekCount]
 }
 
 // backup backs the input stream up one token.
@@ -105,7 +107,7 @@ func (t *Template) backup() {
 // backup2 backs the input stream up two tokens.
 // The zeroth token is already there.
 func (t *Template) backup2(t1 item) {
-	t.token[1] = t1
+	t.lookaheadTokens[1] = t1
 	t.peekCount = 2
 }
 
@@ -113,29 +115,31 @@ func (t *Template) backup2(t1 item) {
 // The zeroth token is already there.
 func (t *Template) backup3(t2, t1 item) {
 	// Reverse order: we're pushing back.
-	t.token[1] = t1
-	t.token[2] = t2
+	t.lookaheadTokens[1] = t1
+	t.lookaheadTokens[2] = t2
 	t.peekCount = 3
 }
 
 // peek returns but does not consume the next token.
 func (t *Template) peek() item {
 	if t.peekCount > 0 {
-		return t.token[t.peekCount-1]
+		return t.lookaheadTokens[t.peekCount-1]
 	}
 	t.peekCount = 1
-	t.token[0] = t.lex.nextItem()
-	return t.token[0]
+	t.lookaheadTokens[0] = t.lex.nextItem()
+	t.curToken = t.lookaheadTokens[0]
+	return t.lookaheadTokens[0]
 }
 
 // nextNonSpace returns the next non-space token.
 func (t *Template) nextNonSpace() (token item) {
 	for {
 		token = t.next()
-		if token.typ != itemSpace {
+		if token.kind != itemSpace {
 			break
 		}
 	}
+	t.curToken = token
 	return token
 }
 
@@ -143,10 +147,11 @@ func (t *Template) nextNonSpace() (token item) {
 func (t *Template) peekNonSpace() (token item) {
 	for {
 		token = t.next()
-		if token.typ != itemSpace {
+		if token.kind != itemSpace {
 			break
 		}
 	}
+	t.curToken = token
 	t.backup()
 	return token
 }
@@ -161,23 +166,23 @@ func (t *Template) error(reason, message string) errors.Error {
 		reason,
 		t.ParseName,
 		message,
-		&errors.Position{L: t.lex.lineNumber(), C: 0},
+		errors.Position{L: t.lex.lineNumber(), C: t.lex.colNumber()},
 	)
 }
 
 // expect consumes the next token and guarantees it has the required type.
-func (t *Template) expect(expectedType itemType, context, expected string) errors.Error {
+func (t *Template) expect(expectedType itemKind, context, expected string) errors.Error {
 	token := t.nextNonSpace()
-	if token.typ != expectedType {
+	if token.kind != expectedType {
 		return t.unexpected(token, context, expected)
 	}
 	return nil
 }
 
 // expectI consumes the next token and guarantees it has the required type.
-func (t *Template) expectI(expectedType itemType, context, expected string) (item, errors.Error) {
+func (t *Template) expectI(expectedType itemKind, context, expected string) (item, errors.Error) {
 	token := t.nextNonSpace()
-	if token.typ != expectedType {
+	if token.kind != expectedType {
 		return item{}, t.unexpected(token, context, expected)
 	}
 	return token, nil
@@ -192,9 +197,9 @@ func (t *Template) expectRightDelimI(context string) (item, errors.Error) {
 }
 
 // expectOneOf consumes the next token and guarantees it has one of the required types.
-func (t *Template) expectOneOf(expected1, expected2 itemType, context, expectedAs string) (item, errors.Error) {
+func (t *Template) expectOneOf(expected1, expected2 itemKind, context, expectedAs string) (item, errors.Error) {
 	token := t.nextNonSpace()
-	if token.typ != expected1 && token.typ != expected2 {
+	if token.kind != expected1 && token.kind != expected2 {
 		return item{}, t.unexpected(token, context, expectedAs)
 	}
 	return token, nil
@@ -203,13 +208,13 @@ func (t *Template) expectOneOf(expected1, expected2 itemType, context, expectedA
 // unexpected complains about the token and terminates processing.
 func (t *Template) unexpected(token item, context, expected string) errors.Error {
 	switch {
-	case token.typ == itemImport,
-		token.typ == itemExtends:
+	case token.kind == itemImport,
+		token.kind == itemExtends:
 		return t.error(
 			errors.UnexpectedKeywordReason,
 			fmt.Sprintf("parsing %s: unexpected keyword '%s' ('%s' statements must be at the beginning of the template)", context, token.val, token.val),
 		).WithColumn(errors.Column(token.pos))
-	case token.typ > itemKeyword:
+	case token.kind > itemKeyword:
 		return t.error(
 			errors.UnexpectedKeywordReason,
 			fmt.Sprintf("parsing %s: unexpected keyword '%s' (expected %s)", context, token.val, expected),
@@ -286,19 +291,19 @@ func (t *Template) expectString(context string) (string, errors.Error) {
 func (t *Template) parseTemplate(cacheAfterParsing bool) (next Node, err errors.Error) {
 	t.Root = t.newList(t.peek().pos)
 	// {{ extends|import stringLiteral }}
-	for t.peek().typ != itemEOF {
+	for t.peek().kind != itemEOF {
 		delim := t.next()
-		if delim.typ == itemText && strings.TrimSpace(delim.val) == "" {
+		if delim.kind == itemText && strings.TrimSpace(delim.val) == "" {
 			continue // skips empty text nodes
 		}
-		if delim.typ == itemLeftDelim {
+		if delim.kind == itemLeftDelim {
 			token := t.nextNonSpace()
-			if token.typ == itemExtends || token.typ == itemImport {
+			if token.kind == itemExtends || token.kind == itemImport {
 				s, err := t.expectString("extends|import")
 				if err != nil {
 					return nil, err
 				}
-				if token.typ == itemExtends {
+				if token.kind == itemExtends {
 					if t.extends != nil {
 						return nil, t.error(errors.UnexpectedClauseReason, "Unexpected extends clause: each template can only extend one template")
 					} else if len(t.imports) > 0 {
@@ -329,7 +334,7 @@ func (t *Template) parseTemplate(cacheAfterParsing bool) (next Node, err errors.
 		}
 	}
 
-	for t.peek().typ != itemEOF {
+	for t.peek().kind != itemEOF {
 		n, err := t.textOrAction()
 		if err != nil {
 			return nil, err
@@ -391,10 +396,10 @@ func (t *Template) blockParametersList(isDeclaring bool, context string) (*Block
 		var expression Expression
 		var err errors.Error
 		next := t.nextNonSpace()
-		if next.typ == itemIdentifier {
+		if next.kind == itemIdentifier {
 			identifier := next.val
 			next2 := t.nextNonSpace()
-			switch next2.typ {
+			switch next2.kind {
 			case itemComma, itemRightParen:
 				block.List = append(block.List, BlockParameter{Identifier: identifier})
 				next = next2
@@ -406,7 +411,7 @@ func (t *Template) blockParametersList(isDeclaring bool, context string) (*Block
 				block.List = append(block.List, BlockParameter{Identifier: identifier, Expression: expression})
 			default:
 				if !isDeclaring {
-					switch next2.typ {
+					switch next2.kind {
 					case itemComma, itemRightParen:
 					default:
 						t.backup2(next)
@@ -421,7 +426,7 @@ func (t *Template) blockParametersList(isDeclaring bool, context string) (*Block
 				}
 			}
 		} else if !isDeclaring {
-			switch next.typ {
+			switch next.kind {
 			case itemComma, itemRightParen:
 			default:
 				t.backup()
@@ -430,7 +435,7 @@ func (t *Template) blockParametersList(isDeclaring bool, context string) (*Block
 			}
 		}
 
-		if next.typ != itemComma {
+		if next.kind != itemComma {
 			t.backup()
 			break
 		}
@@ -454,7 +459,7 @@ func (t *Template) parseBlock() (Node, errors.Error) {
 		return nil, err
 	}
 
-	if t.peekNonSpace().typ != itemRightDelim {
+	if t.peekNonSpace().kind != itemRightDelim {
 		pipe, err = t.expression(context, "context")
 		if err != nil {
 			return nil, err
@@ -496,9 +501,9 @@ func (t *Template) parseYield() (Node, errors.Error) {
 
 	// parse block name
 	name = t.nextNonSpace()
-	if name.typ == itemContent {
+	if name.kind == itemContent {
 		// content yield {{yield content}}
-		if t.peekNonSpace().typ != itemRightDelim {
+		if t.peekNonSpace().kind != itemRightDelim {
 			pipe, err = t.expression(context, "content context")
 			if err != nil {
 				return nil, err
@@ -508,7 +513,7 @@ func (t *Template) parseYield() (Node, errors.Error) {
 			return nil, err
 		}
 		return t.newYield(name.pos, t.lex.lineNumber(), "", nil, pipe, nil, true), nil
-	} else if name.typ != itemIdentifier {
+	} else if name.kind != itemIdentifier {
 		return nil, t.unexpected(name, context, "block name")
 	}
 
@@ -519,7 +524,7 @@ func (t *Template) parseYield() (Node, errors.Error) {
 	}
 
 	// parse optional context & content
-	typ := t.peekNonSpace().typ
+	typ := t.peekNonSpace().kind
 	if typ == itemRightDelim {
 		if err = t.expectRightDelim(context); err != nil {
 			return nil, err
@@ -531,7 +536,7 @@ func (t *Template) parseYield() (Node, errors.Error) {
 			if err != nil {
 				return nil, err
 			}
-			typ = t.peekNonSpace().typ
+			typ = t.peekNonSpace().kind
 		}
 		if typ == itemRightDelim {
 			if err = t.expectRightDelim(context); err != nil {
@@ -562,7 +567,7 @@ func (t *Template) parseInclude() (Node, errors.Error) {
 	if err != nil {
 		return nil, err
 	}
-	if t.peekNonSpace().typ != itemRightDelim {
+	if t.peekNonSpace().kind != itemRightDelim {
 		context, err = t.expression("include", "context")
 		if err != nil {
 			return nil, err
@@ -592,7 +597,7 @@ func (t *Template) parseReturn() (Node, errors.Error) {
 // Terminates at any of the given nodes, returned separately.
 func (t *Template) itemList(terminatedBy ...NodeType) (list *ListNode, next Node, err errors.Error) {
 	list = t.newList(t.peekNonSpace().pos)
-	for t.peekNonSpace().typ != itemEOF {
+	for t.peekNonSpace().kind != itemEOF {
 		n, err := t.textOrAction()
 		if err != nil {
 			return nil, nil, err
@@ -612,7 +617,7 @@ func (t *Template) itemList(terminatedBy ...NodeType) (list *ListNode, next Node
 //
 //	text | action
 func (t *Template) textOrAction() (Node, errors.Error) {
-	switch token := t.nextNonSpace(); token.typ {
+	switch token := t.nextNonSpace(); token.kind {
 	case itemText:
 		return t.newText(token.pos, token.val), nil
 	case itemLeftDelim:
@@ -623,7 +628,7 @@ func (t *Template) textOrAction() (Node, errors.Error) {
 }
 
 func (t *Template) action() (n Node, err errors.Error) {
-	switch token := t.nextNonSpace(); token.typ {
+	switch token := t.nextNonSpace(); token.kind {
 	case itemInclude:
 		return t.parseInclude()
 	case itemBlock:
@@ -662,7 +667,7 @@ func (t *Template) action() (n Node, err errors.Error) {
 		if err != nil {
 			return nil, err
 		}
-		if item.typ == itemSemicolon {
+		if item.kind == itemSemicolon {
 			expr, err = t.expression("command", "pipeline base expression")
 			if err != nil {
 				return nil, err
@@ -683,7 +688,7 @@ func (t *Template) logicalExpression(context string) (Expression, item, errors.E
 	if err != nil {
 		return nil, item{}, err
 	}
-	for endtoken.typ == itemAnd || endtoken.typ == itemOr {
+	for endtoken.kind == itemAnd || endtoken.kind == itemOr {
 		right, rightendtoken, err := t.comparativeExpression(context)
 		if err != nil {
 			return nil, item{}, err
@@ -698,13 +703,13 @@ func (t *Template) parseExpression(context string) (Expression, item, errors.Err
 	if err != nil {
 		return nil, item{}, err
 	}
-	if endtoken.typ == itemTernary {
+	if endtoken.kind == itemTernary {
 		var left, right Expression
 		left, endtoken, err := t.parseExpression(context)
 		if err != nil {
 			return nil, item{}, err
 		}
-		if endtoken.typ != itemColon {
+		if endtoken.kind != itemColon {
 			if err = t.unexpected(endtoken, "ternary expression", "colon in ternary expression"); err != nil {
 				return nil, item{}, err
 			}
@@ -723,7 +728,7 @@ func (t *Template) comparativeExpression(context string) (Expression, item, erro
 	if err != nil {
 		return nil, item{}, err
 	}
-	for endtoken.typ == itemEquals || endtoken.typ == itemNotEquals {
+	for endtoken.kind == itemEquals || endtoken.kind == itemNotEquals {
 		right, rightendtoken, err := t.numericComparativeExpression(context)
 		if err != nil {
 			return nil, item{}, err
@@ -738,7 +743,7 @@ func (t *Template) numericComparativeExpression(context string) (Expression, ite
 	if err != nil {
 		return nil, item{}, err
 	}
-	for endtoken.typ >= itemGreat && endtoken.typ <= itemLessEquals {
+	for endtoken.kind >= itemGreat && endtoken.kind <= itemLessEquals {
 		right, rightendtoken, err := t.additiveExpression(context)
 		if err != nil {
 			return nil, item{}, err
@@ -753,7 +758,7 @@ func (t *Template) additiveExpression(context string) (Expression, item, errors.
 	if err != nil {
 		return nil, item{}, err
 	}
-	for endtoken.typ == itemAdd || endtoken.typ == itemMinus {
+	for endtoken.kind == itemAdd || endtoken.kind == itemMinus {
 		right, rightendtoken, err := t.multiplicativeExpression(context)
 		if err != nil {
 			return nil, item{}, err
@@ -768,7 +773,7 @@ func (t *Template) multiplicativeExpression(context string) (left Expression, en
 	if err != nil {
 		return nil, item{}, err
 	}
-	for endtoken.typ >= itemMul && endtoken.typ <= itemMod {
+	for endtoken.kind >= itemMul && endtoken.kind <= itemMod {
 		right, rightendtoken, err := t.unaryExpression(context)
 		if err != nil {
 			return nil, item{}, err
@@ -781,7 +786,7 @@ func (t *Template) multiplicativeExpression(context string) (left Expression, en
 
 func (t *Template) unaryExpression(context string) (Expression, item, errors.Error) {
 	next := t.nextNonSpace()
-	switch next.typ {
+	switch next.kind {
 	case itemNot:
 		expr, endToken, err := t.comparativeExpression(context)
 		if err != nil {
@@ -817,7 +822,7 @@ func (t *Template) assignmentOrExpression(context string) (operand Expression, e
 		return nil, err
 	}
 	pos := operand.Position()
-	if returned.typ == itemComma || returned.typ == itemAssign {
+	if returned.kind == itemComma || returned.kind == itemAssign {
 		isSet = true
 	} else {
 		if operand == nil {
@@ -839,7 +844,7 @@ func (t *Template) assignmentOrExpression(context string) (operand Expression, e
 				return nil, t.error(errors.UnexpectedNodeReason, "unexpected node in assign")
 			}
 
-			switch returned.typ {
+			switch returned.kind {
 			case itemComma:
 				operand, returned, err = t.parseExpression(context)
 				if err != nil {
@@ -871,7 +876,7 @@ func (t *Template) assignmentOrExpression(context string) (operand Expression, e
 				return nil, err
 			}
 			right = append(right, operand)
-			if returned.typ != itemComma {
+			if returned.kind != itemComma {
 				t.backup()
 				break
 			}
@@ -937,11 +942,11 @@ func (t *Template) pipeline(context string, baseExprMutate Expression) (pipe *Pi
 		if err != nil {
 			return nil, err
 		}
-		if token.typ == itemRightDelim {
+		if token.kind == itemRightDelim {
 			break
 		}
 		token = t.nextNonSpace()
-		switch token.typ {
+		switch token.kind {
 		case itemField, itemIdentifier:
 			t.backup()
 			command, err = t.command(nil)
@@ -979,7 +984,7 @@ func (t *Template) command(baseExpr Expression) (*CommandNode, errors.Error) {
 	cmd.BaseExpr = baseExpr
 
 	next := t.nextNonSpace()
-	switch next.typ {
+	switch next.kind {
 	case itemColon:
 		callArgs, err := t.parseArguments()
 		if err != nil {
@@ -1016,13 +1021,13 @@ func (t *Template) operand(context string) (Expression, errors.Error) {
 			return nil, err
 		}
 	}
-	lefBracketHandler := func(node Node, nullable bool) (Node, errors.Error) {
+	lefBracketHandler := func(node Node, lax bool) (Node, errors.Error) {
 		base := node
 		var index Expression
 		var next item
 
 		// found colon is slice expression
-		if t.peekNonSpace().typ != itemColon {
+		if t.peekNonSpace().kind != itemColon {
 			index, next, err = t.parseExpression("index|slice expression")
 			if err != nil {
 				return nil, err
@@ -1031,10 +1036,10 @@ func (t *Template) operand(context string) (Expression, errors.Error) {
 			next = t.nextNonSpace()
 		}
 
-		switch next.typ {
+		switch next.kind {
 		case itemColon:
 			var endIndex Expression
-			if t.peekNonSpace().typ != itemRightBrackets {
+			if t.peekNonSpace().kind != itemRightBrackets {
 				endIndex, err = t.expression("slice expression", "end indexß")
 				if err != nil {
 					return nil, err
@@ -1042,7 +1047,7 @@ func (t *Template) operand(context string) (Expression, errors.Error) {
 			}
 			node = t.newSliceExpr(node.Position(), node.line(), base, index, endIndex)
 		case itemRightBrackets:
-			node = t.newIndexExpr(node.Position(), node.line(), base, index, nullable)
+			node = t.newIndexExpr(node.Position(), node.line(), base, index, lax)
 			fallthrough
 		default:
 			t.backup()
@@ -1057,10 +1062,12 @@ func (t *Template) operand(context string) (Expression, errors.Error) {
 
 	for {
 		peek := t.peek()
-		if peek.typ == itemField || peek.typ == itemLaxField {
-			chain := t.newChain(t.peek().pos, node)
-			for t.peekNonSpace().typ == itemField || t.peekNonSpace().typ == itemLaxField {
-				chain.Add(t.next().val)
+		if peek.kind == itemField || peek.kind == itemLaxField {
+			chain := t.newChain(t.peek().pos, node.line(), node)
+			for t.peekNonSpace().kind == itemField || t.peekNonSpace().kind == itemLaxField {
+				if err = chain.Add(t.next().val); err != nil {
+					return nil, err
+				}
 			}
 			// Compatibility with original API: If the term is of type NodeField
 			// or NodeVariable, just put more fields on the original.
@@ -1069,7 +1076,7 @@ func (t *Template) operand(context string) (Expression, errors.Error) {
 			// More complex error cases will have to be handled at execution time.
 			switch node.Type() {
 			case NodeField:
-				node = t.newField(chain.Position(), chain.String(), peek.typ == itemLaxField)
+				node = t.newField(chain.Position(), chain.String(), peek.kind == itemLaxField)
 			case NodeBool, NodeString, NodeNumber, NodeNil:
 				if err = t.error(errors.UnexpectedReason, fmt.Sprintf("unexpected . after term %q", node.String())); err != nil {
 					return nil, err
@@ -1084,7 +1091,7 @@ func (t *Template) operand(context string) (Expression, errors.Error) {
 			nodeTYPE == NodeField ||
 			nodeTYPE == NodeChain ||
 			nodeTYPE == NodeIndexExpr {
-			switch t.nextNonSpace().typ {
+			switch t.nextNonSpace().kind {
 			case itemLeftParen:
 				callExpr := t.newCallExpr(node.Position(), t.lex.lineNumber(), node)
 				callArgs, err := t.parseArguments()
@@ -1126,7 +1133,7 @@ func (t *Template) parseArguments() (args CallArgs, err errors.Error) {
 loop:
 	for {
 		peek := t.peekNonSpace()
-		if peek.typ == itemRightParen {
+		if peek.kind == itemRightParen {
 			break
 		}
 		var (
@@ -1147,7 +1154,7 @@ loop:
 			args.HasPipeSlot = true
 		}
 		args.Exprs = append(args.Exprs, expr)
-		switch endtoken.typ {
+		switch endtoken.kind {
 		case itemComma:
 			// continue with closing parens (allowed because of multiline syntax) or next arg
 		default:
@@ -1192,7 +1199,7 @@ func (t *Template) parseControl(allowElseIf bool, context string) (pos Pos, line
 		return
 	}
 	if next.Type() == nodeElse {
-		if allowElseIf && t.peek().typ == itemIf {
+		if allowElseIf && t.peek().kind == itemIf {
 			// Special case for "else if". If the "else" is followed immediately by an "if",
 			// the elseControl will have left the "if" token pending. Treat
 			//	{{if a}}_{{else if b}}_{{end}}
@@ -1280,7 +1287,7 @@ func (t *Template) contentControl() (Node, errors.Error) {
 func (t *Template) elseControl() (Node, errors.Error) {
 	// Special case for "else if".
 	peek := t.peekNonSpace()
-	if peek.typ == itemIf {
+	if peek.kind == itemIf {
 		// We see "{{else if ... " but in effect rewrite it to {{else}}{{if ... ".
 		return t.newElse(peek.pos, t.lex.lineNumber()), nil
 	}
@@ -1330,7 +1337,7 @@ func (t *Template) parseCatch() (*catchNode, errors.Error) {
 	line := t.lex.lineNumber()
 	var errVar *IdentifierNode
 	peek := t.peekNonSpace()
-	if peek.typ != itemRightDelim {
+	if peek.kind != itemRightDelim {
 		_errVar, err := t.term()
 		if err != nil {
 			return nil, err
@@ -1365,7 +1372,7 @@ func (t *Template) parseCatch() (*catchNode, errors.Error) {
 // A term is a simple "expression".
 // A nil return means the next item is not a term.
 func (t *Template) term() (Node, errors.Error) {
-	switch token := t.nextNonSpace(); token.typ {
+	switch token := t.nextNonSpace(); token.kind {
 	case itemError:
 		return nil, t.error("item.error", fmt.Sprintf("%s", token.val))
 	case itemIdentifier:
@@ -1381,7 +1388,7 @@ func (t *Template) term() (Node, errors.Error) {
 	case itemBool:
 		return t.newBool(token.pos, token.val == "true"), nil
 	case itemCharConstant, itemComplex, itemNumber:
-		number, err := t.newNumber(token.pos, token.val, token.typ)
+		number, err := t.newNumber(token.pos, token.val, token.kind)
 		if err != nil {
 			return nil, t.error("", err.Error())
 		}
@@ -1391,7 +1398,7 @@ func (t *Template) term() (Node, errors.Error) {
 		if err != nil {
 			return nil, err
 		}
-		if token := t.next(); token.typ != itemRightParen {
+		if token := t.next(); token.kind != itemRightParen {
 			return nil, t.unexpected(token, "parenthesized expression", "closing parenthesis")
 		}
 		return pipe, nil

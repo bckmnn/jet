@@ -269,7 +269,7 @@ func (rt *Runtime) executeSet(left Expression, right reflect.Value) errors.Error
 		if err != nil {
 			return err
 		}
-		fields = chain.Field
+		fields = chain.Idents
 	} else {
 		fields = left.(*FieldNode).Idents
 		value = rt.context
@@ -278,7 +278,7 @@ func (rt *Runtime) executeSet(left Expression, right reflect.Value) errors.Error
 	for i := 0; i < lef; i++ {
 		value, err = resolveIndex(value, reflect.Value{}, fields[i].name, fields[i].lax)
 		if err != nil {
-			return left.error(err.Reason(), err.Message())
+			return left.error(err.WithColumn(errors.Column(left.Position())).Reason(), err.Message())
 		}
 	}
 
@@ -786,7 +786,7 @@ func (rt *Runtime) evalPrimaryExpressionGroup(node Expression) (reflect.Value, e
 			return reflect.Value{}, err
 		}
 
-		resolved, err := resolveIndex(base, index, "", node.Nullable)
+		resolved, err := resolveIndex(base, index, "", node.Lax)
 		if err != nil {
 			return reflect.Value{}, node.error(err.Reason(), err.Message())
 		}
@@ -878,7 +878,7 @@ func (rt *Runtime) isSet(node Node) (ok bool, err errors.Error) {
 			return false, err
 		}
 
-		resolved, err := resolveIndex(base, index, "", node.Nullable)
+		resolved, err := resolveIndex(base, index, "", node.Lax)
 		return err == nil && notNil(resolved), nil
 	case NodeIdentifier:
 		value, err := rt.resolve(node.String())
@@ -922,7 +922,7 @@ func (rt *Runtime) evalNumericComparativeExpression(node *NumericComparativeExpr
 	// this is necessary for expressions like 4*1.23
 	needFloatPromotion := !isFloat(kind) && isFloat(right.Kind())
 
-	switch node.Operator.typ {
+	switch node.Operator.kind {
 	case itemGreat:
 		if isInt(kind) {
 			if needFloatPromotion {
@@ -1009,7 +1009,7 @@ func (rt *Runtime) evalLogicalExpression(node *LogicalExprNode) (reflect.Value, 
 	if err != nil {
 		return reflect.Value{}, err
 	}
-	if node.Operator.typ == itemAnd {
+	if node.Operator.kind == itemAnd {
 		truthy = truthy && isTrue(right)
 	} else {
 		truthy = truthy || isTrue(right)
@@ -1027,7 +1027,7 @@ func (rt *Runtime) evalComparativeExpression(node *ComparativeExprNode) (reflect
 		return reflect.Value{}, err
 	}
 	equal := checkEquality(left, right)
-	if node.Operator.typ == itemNotEquals {
+	if node.Operator.kind == itemNotEquals {
 		return reflect.ValueOf(!equal), nil
 	}
 	return reflect.ValueOf(equal), nil
@@ -1130,7 +1130,7 @@ func (rt *Runtime) evalMultiplicativeExpression(node *MultiplicativeExprNode) (r
 	// if the left value is not a float and the right is, we need to promote the left value to a float before the calculation
 	// this is necessary for expressions like 4*1.23
 	needFloatPromotion := !isFloat(kind) && isFloat(right.Kind())
-	switch node.Operator.typ {
+	switch node.Operator.kind {
 	case itemMul:
 		if isInt(kind) {
 			if needFloatPromotion {
@@ -1184,7 +1184,7 @@ func (rt *Runtime) evalMultiplicativeExpression(node *MultiplicativeExprNode) (r
 }
 
 func (rt *Runtime) evalAdditiveExpression(node *AdditiveExprNode) (reflect.Value, errors.Error) {
-	isAdditive := node.Operator.typ == itemAdd
+	isAdditive := node.Operator.kind == itemAdd
 	if node.Left == nil {
 		right, err := rt.evalPrimaryExpressionGroup(node.Right)
 		if err != nil {
@@ -1326,9 +1326,10 @@ func (rt *Runtime) evalBaseExpressionGroup(node Node) (reflect.Value, errors.Err
 		}
 		return resolved, nil
 	case NodeChain:
-		resolved, err := rt.evalChainNodeExpression(node.(*ChainNode))
+		node := node.(*ChainNode)
+		resolved, err := rt.evalChainNodeExpression(node)
 		if err != nil {
-			return reflect.Value{}, node.error(err.Reason(), err.Message())
+			return reflect.Value{}, err
 		}
 		return resolved, nil
 	case NodeNumber:
@@ -1404,21 +1405,22 @@ func (rt *Runtime) evalChainNodeExpression(node *ChainNode) (reflect.Value, erro
 		return reflect.Value{}, err
 	}
 
-	for i := 0; i < len(node.Field); i++ {
-		lax := node.Field[i].lax
-		field, err := resolveIndex(resolved, reflect.ValueOf(node.Field[i].name), node.Field[i].name, lax)
+	for i := 0; i < len(node.Idents); i++ {
+		lax := node.Idents[i].lax
+		field, err := resolveIndex(resolved, reflect.ValueOf(node.Idents[i].name), node.Idents[i].name, lax)
 		if err != nil {
-			return reflect.Value{}, node.error(err.Reason(), err.Message())
+			return reflect.Value{}, node.errorField(err.Reason(), err.Message(), i)
 		}
 		if !field.IsValid() {
-			if resolved.Kind() == reflect.Map && i == len(node.Field)-1 {
+			if resolved.Kind() == reflect.Map && i == len(node.Idents)-1 {
 				// return reflect.Zero(resolved.Type().Elem()), nil
 				return reflect.Value{}, nil
 			}
 			if !lax {
 				return reflect.Value{}, errors.New().
 					WithReason(errors.NotFoundFieldOrMethodReason).
-					WithMessage(fmt.Sprintf("there is no field or method '%s' in %s (%s)", node.Field[i].name, getTypeString(resolved), node))
+					WithMessage(fmt.Sprintf("there is no field or method '%s' in %s (%s)", node.Idents[i].name, getTypeString(resolved), node)).
+					WithColumn(node.Idents[i].col)
 			}
 			field = reflect.ValueOf(nil)
 		}

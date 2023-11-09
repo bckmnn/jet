@@ -48,6 +48,7 @@ type NodeType int
 type NodeBase struct {
 	TemplatePath string
 	Line         int
+	Item         item
 	NodeType
 	Pos
 }
@@ -64,7 +65,7 @@ func (n *NodeBase) error(reason errors.Reason, message errors.Message) errors.Er
 		reason,
 		n.TemplatePath,
 		message,
-		&errors.Position{L: n.Line, C: 0},
+		errors.Position{L: n.Line, C: n.Item.col},
 	)
 }
 
@@ -249,8 +250,11 @@ type FieldNode struct {
 }
 
 type Ident struct {
+	NodeBase
+
 	name string
 	lax  bool
+	col  int
 }
 
 type Idents []Ident
@@ -282,32 +286,49 @@ func (f *FieldNode) String() string {
 // The periods are dropped from each ident.
 type ChainNode struct {
 	NodeBase
-	Node  Node
-	Field Idents // The identifiers in lexical order.
+	Node   Node
+	Idents Idents // The identifiers in lexical order.
+}
+
+func (c *ChainNode) errorField(reason errors.Reason, message errors.Message, index int) errors.Error {
+	if reason == "" {
+		reason = errors.RuntimeErrorReason
+	}
+	return errors.Build(
+		reason,
+		c.TemplatePath,
+		message,
+		errors.Position{L: c.Line, C: c.Idents[index].col},
+	)
 }
 
 // Add adds the named field (which should start with a period) to the end of the chain.
-func (c *ChainNode) Add(field string) {
-	var nullable bool
+func (c *ChainNode) Add(field string) errors.Error {
+	var lax bool
 	if len(field) == 0 || (field[0] != '.' && (field[0] != '?' && field[1] != '.')) {
-		panic("no dot in field")
+		return errors.InvalidValueErr.WithMessage("no dot in field")
 	}
 	if field[0] == '?' && field[1] == '.' {
-		nullable = true
+		lax = true
 	}
-	// todo
-	if nullable {
-		field = field[2:] // Remove leading dot.
+	if lax {
+		field = field[2:] // Remove leading ?.
 	} else {
-		field = field[1:] // Remove leading dot.
+		field = field[1:] // Remove leading .
 	}
 	if field == "" {
-		panic("empty field")
+		return errors.InvalidValueErr.WithMessage("empty field")
 	}
-	c.Field = append(c.Field, Ident{
+	col := c.NodeBase.Item.col
+	if len(c.Idents) > 0 {
+		col = c.Idents[len(c.Idents)-1].col + len(c.Idents[len(c.Idents)-1].name) + 1
+	}
+	c.Idents = append(c.Idents, Ident{
 		name: field,
-		lax:  nullable,
+		lax:  lax,
+		col:  col,
 	})
+	return nil
 }
 
 func (c *ChainNode) String() string {
@@ -315,7 +336,7 @@ func (c *ChainNode) String() string {
 	if _, ok := c.Node.(*PipeNode); ok {
 		s = "(" + s + ")"
 	}
-	for _, id := range c.Field {
+	for _, id := range c.Idents {
 		if id.lax {
 			s += "?"
 		}
@@ -692,17 +713,17 @@ func (s *TernaryExprNode) String() string {
 
 type IndexExprNode struct {
 	NodeBase
-	Base     Expression
-	Index    Expression
-	Nullable bool
+	Base  Expression
+	Index Expression
+	Lax   bool
 }
 
 func (s *IndexExprNode) String() string {
-	nullable := ""
-	if s.Nullable {
-		nullable = "?"
+	lax := ""
+	if s.Lax {
+		lax = "?"
 	}
-	return fmt.Sprintf("%s%s[%s]", s.Base, nullable, s.Index)
+	return fmt.Sprintf("%s%s[%s]", s.Base, lax, s.Index)
 }
 
 type SliceExprNode struct {
