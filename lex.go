@@ -248,7 +248,7 @@ func (l *lexer) rowNumber() int {
 }
 
 func (l *lexer) colNumber() int {
-	return int(l.pos) - strings.Index(l.input[:l.start], "\n") - int(l.pos-l.start)
+	return int(l.pos) - strings.LastIndex(l.input[:l.start], "\n") - int(l.pos-l.start)
 }
 
 // errorf returns an error token and terminates the scan by passing

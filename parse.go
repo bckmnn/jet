@@ -223,7 +223,7 @@ func (t *Template) unexpected(token item, context, expected string) errors.Error
 		return t.error(
 			errors.UnexpectedTokenReason,
 			fmt.Sprintf("parsing %s: unexpected token '%s' (expected %s)", context, token.val, expected),
-		).WithColumn(errors.Column(token.pos))
+		).WithColumn(token.col)
 	}
 }
 
@@ -903,8 +903,8 @@ func (t *Template) assignmentOrExpression(context string) (operand Expression, e
 		}
 		operand = t.newSet(pos, line, isLet, isIndexExprGetLookup, left, right)
 		return
-
 	}
+
 	return operand, nil
 }
 

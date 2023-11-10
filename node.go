@@ -322,6 +322,9 @@ func (c *ChainNode) Add(field string) errors.Error {
 	col := c.NodeBase.Item.col
 	if len(c.Idents) > 0 {
 		col = c.Idents[len(c.Idents)-1].col + len(c.Idents[len(c.Idents)-1].name) + 1
+		if c.Idents[len(c.Idents)-1].lax {
+			col += 1
+		}
 	}
 	c.Idents = append(c.Idents, Ident{
 		name: field,
