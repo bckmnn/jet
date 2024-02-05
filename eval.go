@@ -699,7 +699,7 @@ func (rt *Runtime) executeInclude(node *IncludeNode) (returnValue reflect.Value,
 	}
 
 	t, getTemplateErr := rt.set.getSiblingTemplate(templatePath, node.TemplatePath, true)
-	if err != nil {
+	if getTemplateErr != nil {
 		return reflect.Value{}, node.error("", getTemplateErr.Error())
 	}
 
